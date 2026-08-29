@@ -67,6 +67,71 @@ Addresses are printed at the end and saved to `broadcast/DeployTestnet.s.sol/466
 `TestStockToken.claim()` mints 100 NVDA to the caller, once an hour, no permission needed. Nobody
 has to ask for anything to try the protocol.
 
+### Live testnet deployment
+
+Deployed and verified 2026-08-29.
+
+| Contract | Address |
+| --- | --- |
+| `AarkaFactory` | `0x72aEB5a95DD3EfAf18394B4D7d7c50E82D20Fc3e` |
+| `AarkaLens` | `0xE20e82Ea65701Be6add1860f5D5f7d18E6075715` |
+| `ExpiryCalendar` | `0x975f70942626C666b65fF1072eD9450B750305Db` |
+| `AarkaParityHook` | `0x55e9dEFDC83D71A6f34e4c881317388765034040` |
+| `TestStockToken` (NVDA) | `0xDDD46CA784be61b092304f707b0fb6B4A9F2C0b1` |
+| `TestAggregator` (RHNVDA/USD) | `0x7D3f8f6BB4f1457bD4b6D06E0d023885Bfac91C4` |
+| `TestUSDG` | `0xCA0044ed050b4fed8894D283c931355333d9B964` |
+
+Series: `$215 / 04SEP26` `0x894dC1c06f356E8C9dCD8DF41e8883Ec70C9Dce9` ·
+`$215 / 11SEP26` `0xb12c20E3e7161bA76A1bC644b58a4ae79f5eF496` ·
+`$240 / 11SEP26` `0x1D919ceBbd44F667Ae939905b3B64cDC92d31b81`
+
+## Deploying the parity hook
+
+The hook's permissions live in the low 14 bits of its own address, so the address must be mined.
+
+> **The one thing that will cost you a night.** `HookMiner.find(deployer, ...)` must be given the
+> **canonical Create2Deployer** `0x4e59b44847b379578588920cA78FbF26c0B4956C`, not `msg.sender`.
+> Inside a Foundry test the CREATE2 is performed by the test contract itself, so mining against
+> `address(this)` works and the mistake stays invisible. In a broadcast script Foundry routes
+> `new X{salt: ...}` through that factory instead, the mined address no longer matches, and the
+> hook's constructor rejects it with `InvalidHookAddress()`. Which is the constructor doing its
+> job — but only if you know what it is telling you.
+
+```sh
+forge script script/DeployHook.s.sol --rpc-url robinhood_testnet --broadcast \
+  --private-key $PRIVATE_KEY --gas-limit 900000000 \
+  --sig "run(address,address)" <SERIES> <STOCK_TOKEN>
+```
+
+Deploys `TestUSDG`, mines and deploys the hook, opens the three pools at parity, wires them, and
+seeds liquidity. The `--gas-limit` matters: `HookMiner` searches up to 160k salts and will exhaust
+the default script frame.
+
+### Proving it works
+
+```sh
+forge script script/ProveParity.s.sol --rpc-url robinhood_testnet --broadcast \
+  --private-key $PRIVATE_KEY --gas-limit 900000000 \
+  --sig "run(address,address,address,uint256)" <HOOK> <SWAP_ROUTER> <STOCK_TOKEN> 50000000000
+```
+
+A real run, tx `0xd64a1ab74d5fc15c7d0262909b3693d0ab11b7d6513f93d2b28b1255029cbbad`:
+
+```
+                      before        after
+P(underlying)        $215.000      $222.255
+P(floor)             $180.000      $187.733
+P(upside)             $35.000       $34.541
+sum of halves        $215.000      $222.274
+parity gap              0 bps         0 bps
+
+ParityRestored: minted 112.24 NVDA, 616.66 USDG profit donated to LPs
+```
+
+A $50,000 swap moved the floor pool from $180.00 to $187.73. Left alone that would have opened a
+gap of roughly 360 bps. The hook bought the underlying, minted, and sold both halves inside the
+same transaction — and the sum still tracks the underlying to within a basis point.
+
 ## Mainnet (4663)
 
 Not yet. Blocked on the open items in [`ARCHITECTURE.md` §15](./ARCHITECTURE.md#15-open-items) —
