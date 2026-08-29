@@ -41,6 +41,11 @@ forge coverage --no-match-coverage "test|script"
 100% line and function coverage on `src/`. The invariant suite runs 512 sequences of 64 random
 calls each and asserts the vault can always cover every outstanding claim.
 
+## Deploying
+
+See [`DEPLOY.md`](./DEPLOY.md). Robinhood Chain testnet has no stock tokens and no Chainlink feeds,
+so the deploy ships stand-ins for both; Uniswap v4 is already there at its mainnet address.
+
 ## Status
 
 Core protocol complete and tested. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) section 15 for the
