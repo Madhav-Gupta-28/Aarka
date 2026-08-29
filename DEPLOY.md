@@ -69,21 +69,25 @@ has to ask for anything to try the protocol.
 
 ### Live testnet deployment
 
-Deployed and verified 2026-08-29.
+Deployed 2026-08-29, **redeployed after the security review** in [`AUDIT.md`](./AUDIT.md). The
+earlier set carried the AUDIT-04 hook vulnerability and is abandoned; these are the live addresses.
 
 | Contract | Address |
 | --- | --- |
-| `AarkaFactory` | `0x72aEB5a95DD3EfAf18394B4D7d7c50E82D20Fc3e` |
-| `AarkaLens` | `0xE20e82Ea65701Be6add1860f5D5f7d18E6075715` |
-| `ExpiryCalendar` | `0x975f70942626C666b65fF1072eD9450B750305Db` |
-| `AarkaParityHook` | `0x55e9dEFDC83D71A6f34e4c881317388765034040` |
-| `TestStockToken` (NVDA) | `0xDDD46CA784be61b092304f707b0fb6B4A9F2C0b1` |
-| `TestAggregator` (RHNVDA/USD) | `0x7D3f8f6BB4f1457bD4b6D06E0d023885Bfac91C4` |
-| `TestUSDG` | `0xCA0044ed050b4fed8894D283c931355333d9B964` |
+| `AarkaFactory` | `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0` |
+| `AarkaLens` | `0x11d6e43CEBC46F5782Aa943924eAbDe8182A4317` |
+| `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |
+| `AarkaParityHook` | `0x9aB510FBf4767eeA1F185Ef611BC717f7eb6c040` |
+| `TestStockToken` (NVDA) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
+| `TestAggregator` (RHNVDA/USD) | `0x6a985039287dC8BB054C36804eb75337f69f944F` |
+| `TestUSDG` | `0xDF262DeFe539619576a789423c5145D0eDe8d32F` |
+| liquidity router | `0x0722dE2fF7d0587a7809398c57EDea90515D71dF` |
+| swap router | `0x83b5D54866A826426f4E413b668B587c052Ab824` |
 
-Series: `$215 / 04SEP26` `0x894dC1c06f356E8C9dCD8DF41e8883Ec70C9Dce9` ·
-`$215 / 11SEP26` `0xb12c20E3e7161bA76A1bC644b58a4ae79f5eF496` ·
-`$240 / 11SEP26` `0x1D919ceBbd44F667Ae939905b3B64cDC92d31b81`
+Series: `$215 / 04SEP26` · `$215 / 11SEP26` `0x39F53AfDa432399EE7973015ED0C9d8a500a11c6` ·
+`$240 / 11SEP26` `0xb4943671814B39Eb221f9d794b2353a6c3978B51`
+
+52 expiries published, Sep 2026 to Aug 2027.
 
 ## Deploying the parity hook
 
@@ -115,7 +119,7 @@ forge script script/ProveParity.s.sol --rpc-url robinhood_testnet --broadcast \
   --sig "run(address,address,address,uint256)" <HOOK> <SWAP_ROUTER> <STOCK_TOKEN> 50000000000
 ```
 
-A real run, tx `0xd64a1ab74d5fc15c7d0262909b3693d0ab11b7d6513f93d2b28b1255029cbbad`:
+A real run against the reviewed contracts:
 
 ```
                       before        after
