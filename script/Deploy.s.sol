@@ -28,6 +28,35 @@ contract Deploy is Script {
     }
 }
 
+/// @notice Robinhood stock tokens on chain 4663. Every address below was verified on-chain on
+///         2026-08-29 by calling symbol() and decimals(); all are 18 decimals and all implement
+///         uiMultiplier(), oraclePaused() and effectiveAt().
+library RobinhoodTokens {
+    address internal constant NVDA = 0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC;
+    address internal constant TSLA = 0x322F0929c4625eD5bAd873c95208D54E1c003b2d;
+    address internal constant AAPL = 0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9;
+    address internal constant MSFT = 0xe93237C50D904957Cf27E7B1133b510C669c2e74;
+    address internal constant AMZN = 0x12f190a9F9d7D37a250758b26824B97CE941bF54;
+    address internal constant GOOGL = 0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3;
+    address internal constant META = 0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35;
+    address internal constant MSTR = 0xec262a75e413fAfD0dF80480274532C79D42da09;
+    address internal constant COIN = 0x6330D8C3178a418788dF01a47479c0ce7CCF450b;
+    address internal constant SPY = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
+    address internal constant QQQ = 0xD5f3879160bc7c32ebb4dC785F8a4F505888de68;
+    address internal constant USDG = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
+}
+
+/// @notice Uniswap v4 on Robinhood Chain. PoolManager is at the same address on mainnet (4663)
+///         and testnet (46630), verified by bytecode length on both.
+library UniswapV4 {
+    address internal constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
+    address internal constant POSITION_MANAGER = 0x58daec3116aae6D93017bAAea7749052E8a04fA7;
+    address internal constant UNIVERSAL_ROUTER = 0x8876789976dEcBfCbBbe364623C63652db8C0904;
+    address internal constant STATE_VIEW = 0xF3334192D15450CdD385c8B70e03f9A6bD9E673b;
+    address internal constant QUOTER = 0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94;
+    address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+}
+
 /// @notice Chainlink feed proxies on Robinhood Chain mainnet (chain 4663), resolved from
 ///         reference-data-directory.vercel.app/feeds-robinhood-mainnet.json on 2026-08-29.
 ///         All 35 equity feeds: 8 decimals, 86400s heartbeat, 0.5% deviation, us_equities_24/5.
