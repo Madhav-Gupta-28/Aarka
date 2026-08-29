@@ -26,6 +26,7 @@ Every on-chain fact in here was verified directly against a live RPC or a primar
 14. [Test plan](#14-test-plan)
 15. [Open items](#15-open-items)
 16. [Sources](#16-sources)
+- [Appendix A — Verified feed data](#appendix-a--verified-feed-data)
 
 ---
 
@@ -949,13 +950,13 @@ Everything below must be resolved before mainnet. Each is a blocking item, not a
 
 | # | Item | Why it blocks | How to resolve |
 | --- | --- | --- | --- |
-| 1 | **Sequencer uptime feed address on Robinhood Chain** | [§7.3](#73-sequencer-uptime) guard cannot run without it | Chainlink L2 sequencer feeds directory, or ask in Robinhood Chain developer support |
-| 2 | **Chainlink feed proxy addresses per ticker** | every series needs one; must not be hard-coded from a blog post | `docs.chain.link/data-feeds/price-feeds/addresses?network=robinhood` — Robinhood's own docs name this the source of truth |
+| 1 | **Sequencer uptime feed address on Robinhood Chain** | [§7.3](#73-sequencer-uptime) guard cannot run without it | **STILL OPEN — and it is a documentation conflict, not a search failure.** Robinhood's docs tell integrators to use this feed; Chainlink's directory does not contain one. See [Appendix A.3](#a3-the-sequencer-uptime-feed-is-not-published). Raise with Robinhood Chain developer support |
+| 2 | ~~Chainlink feed proxy addresses per ticker~~ | — | **RESOLVED.** All 35 equity feeds in [Appendix A.1](#a1-equity-feed-proxy-addresses-chain-4663), from Chainlink's machine-readable directory |
 | 3 | **Stock token addresses, mainnet and testnet** | USDG's mainnet address has no code on testnet, so testnet addresses differ throughout | Robinhood Chain contracts page; verify each with `cast call ... "symbol()(string)"` |
 | 4 | **Whether feeds exist on testnet at all** | Chainlink documents these feeds as mainnet-only. If absent, testnet needs a mock aggregator | probe a known feed address on chain 46630 |
 | 5 | **`TransferWithUIAmount` vs `TransferWithScaledUI`** | ERC-8056 names the first; secondary sources report Robinhood emitting the second | read a real stock token's ABI from Blockscout. Cosmetic for the contracts, load-bearing for the subgraph |
 | 6 | **Exact `oraclePaused()` signature** | probed by `staticcall`, so a wrong selector silently disables the guard | read the deployed token ABI |
-| 7 | **Feed round cadence during a quiet session** | validates `MAX_SETTLEMENT_LOOKBACK = 6 hours` empirically | query historical rounds on a low-volatility day and measure the largest `updatedAt` gap |
+| 7 | **Feed round cadence during a quiet session** | validates `MAX_SETTLEMENT_LOOKBACK = 6 hours` empirically | **PARTIALLY RESOLVED.** Measured on NVDA over 111 rounds: worst intra-session gap 2.63 h, so 6 h holds with 2.3x headroom ([Appendix A.2](#a2-measured-round-cadence-nvda)). The sample week contained an earnings print, so re-run on a calm week and a low-volatility ticker before mainnet |
 | 8 | **NYSE calendar for the first year of expiries** | [§5.5](#55-expirycalendar) needs concrete timestamps, DST-correct | generate from the published NYSE holiday calendar; unit-test both DST transitions |
 | 9 | **v4-periphery `HookMiner` availability** | Module 2 cannot be deployed without a mined address | `forge install Uniswap/v4-periphery` |
 
