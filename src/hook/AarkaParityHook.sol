@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
@@ -13,6 +14,7 @@ import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -77,6 +79,19 @@ contract AarkaParityHook is IHooks, Ownable {
     PoolKey public upsideKey;
     bool public wired;
 
+    /// @notice Binary-search steps used to solve for the parity-restoring trade size.
+    /// @dev 20 halvings resolve the size to roughly one part in a million of the cap, which is far
+    ///      finer than the fee tier. Each step is pure arithmetic on state read once up front, so
+    ///      the whole solve costs no additional storage reads.
+    uint256 private constant SOLVER_STEPS = 20;
+
+    /// @dev A pool's state, read once, so the search runs entirely in memory.
+    struct Leg {
+        uint160 sqrtP;
+        uint128 liquidity;
+        bool assetIsZero;
+    }
+
     /// @notice Minimum mispricing before the hook does anything, in basis points.
     /// @dev The gate that keeps ordinary swaps cheap. Below it, afterSwap costs three slot0 reads.
     uint256 public minDeviationBps = 30;
@@ -100,6 +115,7 @@ contract AarkaParityHook is IHooks, Ownable {
     error BelowThreshold();
     error NotProfitable();
     error HookNotImplemented();
+    error NoProfitableSize();
 
     constructor(IPoolManager poolManager_, AarkaSeries series_, Currency quote_, address owner_)
         Ownable(owner_)
@@ -195,7 +211,8 @@ contract AarkaParityHook is IHooks, Ownable {
         uint256 gap = halvesOverpriced ? sum - pUnder : pUnder - sum;
         if (FullMath.mulDiv(gap, BPS, pUnder) < minDeviationBps) revert BelowThreshold();
 
-        uint256 size = maxArbSize;
+        uint256 size = _solveSize(halvesOverpriced);
+        if (size == 0) revert NoProfitableSize();
         if (halvesOverpriced) _mintArb(size);
         else _redeemArb(size);
 
@@ -247,6 +264,99 @@ contract AarkaParityHook is IHooks, Ownable {
     function _donate(PoolKey calldata key, uint256 profit) private {
         if (key.currency0 == quote) poolManager.donate(key, profit, 0, "");
         else poolManager.donate(key, 0, profit, "");
+    }
+
+    // --------------------------------------------------------------------
+    // Optimal sizing
+    // --------------------------------------------------------------------
+
+    /// @notice Solve for the trade size that restores parity, which is also the size that
+    ///         maximises profit.
+    ///
+    /// @dev Profit for the mint direction is `R_f(s) + R_u(s) - C_N(s)`. Differentiating and
+    ///      setting to zero gives
+    ///
+    ///          P_f(s) + P_u(s) = P_N(s)
+    ///
+    ///      which is the parity condition itself. So there is no separate optimisation to run:
+    ///      the profit-maximising size *is* the parity-restoring size, and the problem reduces to
+    ///      finding the root of a function that is monotone in `s`. Selling both halves pushes
+    ///      their prices down while buying the underlying pushes its price up, so the gap shrinks
+    ///      monotonically and a binary search converges.
+    ///
+    ///      The search returns the largest size at which the gap is still open, so it stops just
+    ///      short of the root rather than past it. That is deliberate: fees make the true optimum
+    ///      slightly smaller than the zero-gap point, and undersizing leaves value for the next
+    ///      swap while oversizing loses money. The profitability check remains the backstop.
+    ///
+    ///      Liquidity is read once and treated as constant across the trade. That is exact for a
+    ///      full-range position and a good approximation for a trade inside one tick range; a
+    ///      trade that crosses initialised ticks will be sized slightly high, and the profit
+    ///      check catches it.
+    function _solveSize(bool minting) private view returns (uint256) {
+        Leg memory n = _leg(underlyingKey, underlyingCurrency);
+        Leg memory fl = _leg(floorKey, floorCurrency);
+        Leg memory up = _leg(upsideKey, upsideCurrency);
+        if (n.liquidity == 0 || fl.liquidity == 0 || up.liquidity == 0) return 0;
+
+        // Cap the search so the exact-output legs can never ask a pool for more than it holds,
+        // which would revert inside SqrtPriceMath rather than returning a price.
+        uint256 hi = maxArbSize;
+        if (minting) {
+            hi = Math.min(hi, _maxOut(n));
+        } else {
+            hi = Math.min(hi, Math.min(_maxOut(fl), _maxOut(up)));
+        }
+        if (hi == 0) return 0;
+        if (!_gapOpenAfter(n, fl, up, 1, minting)) return 0; // not even one wei is worth it
+
+        uint256 lo = 1;
+        for (uint256 i; i < SOLVER_STEPS; ++i) {
+            if (hi - lo < 2) break;
+            uint256 mid = lo + (hi - lo) / 2;
+            if (_gapOpenAfter(n, fl, up, mid, minting)) lo = mid;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    /// @dev True while trading `size` would still leave the mispricing pointing the same way.
+    function _gapOpenAfter(Leg memory n, Leg memory fl, Leg memory up, uint256 size, bool minting)
+        private
+        pure
+        returns (bool)
+    {
+        uint256 pN = _priceAfter(n, size, minting); // minting buys the underlying
+        uint256 sum = _priceAfter(fl, size, !minting) + _priceAfter(up, size, !minting);
+        return minting ? sum > pN : pN > sum;
+    }
+
+    /// @dev The pool's price after trading `amount` of the asset, without touching state.
+    function _priceAfter(Leg memory leg, uint256 amount, bool buying) private pure returns (uint256) {
+        bool zeroForOne = buying ? !leg.assetIsZero : leg.assetIsZero;
+        uint160 next = buying
+            ? SqrtPriceMath.getNextSqrtPriceFromOutput(leg.sqrtP, leg.liquidity, amount, zeroForOne)
+            : SqrtPriceMath.getNextSqrtPriceFromInput(leg.sqrtP, leg.liquidity, amount, zeroForOne);
+        uint256 p = FullMath.mulDiv(uint256(next), uint256(next), Q96);
+        return leg.assetIsZero ? p : FullMath.mulDiv(Q96, Q96, p);
+    }
+
+    /// @dev Half the asset a full-range position holds. Half rather than all, because the price
+    ///      goes to infinity as the reserve is drained and the search must stay inside the curve.
+    function _maxOut(Leg memory leg) private pure returns (uint256) {
+        uint256 reserve = leg.assetIsZero
+            ? FullMath.mulDiv(leg.liquidity, Q96, leg.sqrtP)
+            : FullMath.mulDiv(leg.liquidity, leg.sqrtP, Q96);
+        return reserve / 2;
+    }
+
+    function _leg(PoolKey memory key, Currency asset) private view returns (Leg memory) {
+        (uint160 sqrtP,,,) = poolManager.getSlot0(key.toId());
+        return Leg({
+            sqrtP: sqrtP,
+            liquidity: poolManager.getLiquidity(key.toId()),
+            assetIsZero: key.currency0 == asset
+        });
     }
 
     // --------------------------------------------------------------------

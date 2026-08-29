@@ -146,7 +146,7 @@ contract HookBaseTest is Test {
 
         vm.startPrank(owner);
         hook.wire(underlyingKey, floorKey, upsideKey);
-        hook.setParams(30, 200e18);
+        hook.setParams(30, 100_000e18);
         vm.stopPrank();
     }
 

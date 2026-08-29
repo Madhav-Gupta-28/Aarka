@@ -73,11 +73,14 @@ contract AarkaParityHookTest is HookBaseTest {
     ///         the hook closes part of it inside the same transaction, before the swap returns.
     function test_hookClosesTheGapComparedToNoHook() public {
         uint256 withoutHook = _runBigSwap(0); // maxArbSize 0 disables the hook
-        uint256 withHook = _runBigSwap(200e18);
+        uint256 withHook = _runBigSwap(100_000e18);
 
         console.log("parity gap without hook (bps):", withoutHook);
         console.log("parity gap with hook    (bps):", withHook);
         assertLt(withHook, withoutHook, "the hook must reduce the parity gap");
+        // The solver targets the root, not a fixed fraction of it, so the residual is dust.
+        assertLe(withHook, 5, "solved size should close parity to within a handful of bps");
+        assertGt(withoutHook, 500, "the control must actually be badly mispriced");
     }
 
     /// @notice The reentrancy guard, which is what lets the arb trade the pool it was triggered
@@ -143,11 +146,52 @@ contract AarkaParityHookTest is HookBaseTest {
     ///         which is the redeem side of the arb.
     function test_hookHandlesTheHalvesBeingCheap() public {
         uint256 withoutHook = _runBigSell(0);
-        uint256 withHook = _runBigSell(200e18);
+        uint256 withHook = _runBigSell(100_000e18);
         console.log("sell-side gap without hook (bps):", withoutHook);
         console.log("sell-side gap with hook    (bps):", withHook);
-        assertLe(withHook, withoutHook);
+        assertLe(withHook, 5, "the redeem direction must close parity too");
+        assertGt(withoutHook, 500);
     }
+
+    /// @notice The solver must respect maxArbSize as a hard ceiling, so an operator can still
+    ///         bound the hook's exposure regardless of what the maths wants.
+    function test_solverRespectsTheHardCap() public {
+        uint256 capped = _runBigSwap(1e18); // one token: far below the parity-restoring size
+        uint256 uncapped = _runBigSwap(100_000e18);
+        console.log("gap with a 1-token cap (bps):", capped);
+        console.log("gap uncapped           (bps):", uncapped);
+        assertGt(capped, uncapped, "a tight cap must limit how much parity is restored");
+        assertGt(capped, 500, "one token cannot move a 633 bps gap");
+    }
+
+    /// @notice Sizing must adapt to the gap rather than being a constant. A gap twice as large
+    ///         should draw a materially larger trade.
+    function test_sizeScalesWithTheMispricing() public {
+        setUp();
+        vm.recordLogs();
+        _buyFloor(20_000e6);
+        uint256 smallProfit = _lastProfit();
+
+        setUp();
+        vm.recordLogs();
+        _buyFloor(80_000e6);
+        uint256 largeProfit = _lastProfit();
+
+        console.log("profit on a small dislocation:", smallProfit);
+        console.log("profit on a large dislocation:", largeProfit);
+        assertGt(largeProfit, smallProfit, "a wider gap must yield a larger captured profit");
+    }
+
+    function _lastProfit() internal returns (uint256 profit) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == AarkaParityHook.ParityRestored.selector) {
+                (,, profit) = abi.decode(logs[i].data, (bool, uint256, uint256));
+            }
+        }
+    }
+
+    /// @notice Turning the hook off is a clean no-op, not a revert.
 
     // ---------------------------------------------------------------- helpers
 

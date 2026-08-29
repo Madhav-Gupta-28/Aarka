@@ -848,31 +848,65 @@ Installed on P2 and P3. On `afterSwap`:
 
 **Displacement risk.** By internalising the arbitrage the hook removes the incentive for external searchers to do it. If the hook is ever disabled or gas-starved, parity drifts *further* than it would have without it. Mitigation: `mint()` and `redeem()` remain permissionless and unchanged, so the manual arbitrage path is always available. The hook is an optimisation over that path, never a replacement for it.
 
-### 11.6 What the implementation actually achieves
+### 11.6 Sizing the arb: the optimum is the parity point
 
-Built and measured. `AarkaParityHook` is deployed to a `CREATE2` address mined so that its low 14
-bits equal `AFTER_SWAP_FLAG` (`0x40`), which the constructor asserts rather than trusting the
-deploy script.
+The first implementation traded a fixed `maxArbSize` and closed only part of the gap. Solving it
+properly turned out to need no optimiser at all.
 
-Against a control run with the hook disabled, on an identical set of pools and an identical swap:
+Profit in the mint direction is
 
 ```
-                       gap without hook    gap with hook
-halves become dear          633 bps           468 bps      26% closed
-halves become cheap         633 bps           403 bps      36% closed
+  profit(s) = R_floor(s) + R_upside(s) - C_underlying(s)
 ```
 
-**The hook closes part of the gap, not all of it, and that is a real limitation rather than a
-tuning detail.** The arb executes at a fixed `maxArbSize` instead of the size that would exactly
-close the gap, because the optimal size is a function of all three pools' liquidity and solving
-for it on-chain is expensive. Sizing it properly — binary search, or a closed form against the
-three curves — is the obvious next improvement and would raise both figures substantially.
+Differentiating and setting to zero gives
 
-Undersizing is safe in a way oversizing is not: a too-small arb leaves money on the table for the
-next swap to capture, while a too-large one is caught by the profitability check and reverts. The
-tests exercise both, including `maxArbSize` set to 5,000,000 tokens, where the arb's own slippage
-swamps the gap and the whole attempt reverts inside its `try/catch` without disturbing the user's
-swap.
+```
+  P_floor(s) + P_upside(s) = P_underlying(s)
+```
+
+which is the parity condition itself. **The profit-maximising size is exactly the parity-restoring
+size.** There is no trade-off between "close the gap" and "make money" — they are the same number,
+and the problem collapses from an optimisation to a root find.
+
+The root is easy to bracket because the function is monotone: selling both halves pushes their
+prices down while buying the underlying pushes its price up, so the gap shrinks with `s` and never
+turns back. A 20-step binary search resolves it to about one part in a million of the cap.
+
+Three implementation choices worth stating:
+
+- **State is read once.** Each pool's `sqrtPriceX96` and `liquidity` are fetched before the search
+  and the 20 steps run purely in memory, so a finer solve costs arithmetic rather than storage reads.
+- **The search returns the last size at which the gap is still open**, stopping just short of the
+  root rather than past it. Fees put the true optimum slightly below the zero-gap point, and
+  undersizing leaves value for the next swap while oversizing loses money.
+- **`SqrtPriceMath` from v4-core does the curve maths**, not a reimplementation. The search is
+  capped at half of each pool's asset reserve so an exact-output leg can never ask for more than a
+  pool holds, which would revert inside the library instead of returning a price.
+
+Liquidity is treated as constant across the trade. That is exact for a full-range position and
+close for a trade inside one tick range; a trade crossing initialised ticks is sized slightly high,
+and the profitability check catches it.
+
+### 11.6.1 Measured
+
+Same pools, same swap, control run with the hook disabled:
+
+```
+                        no hook     fixed size     solved
+halves become dear      633 bps       468 bps       0 bps
+halves become cheap     633 bps       403 bps       1 bps
+```
+
+Parity is restored essentially completely, in the same transaction, before the user's swap returns.
+
+Two further properties the tests assert rather than assume:
+
+- **Size tracks the mispricing.** A 4x larger dislocation produced 27x the captured profit
+  (63,646,889 vs 1,708,065,478 in quote units) — superlinear, because profit scales with gap times
+  size and the solver moves both.
+- **`maxArbSize` still binds.** Capped at one token against the same 633 bps gap, the hook closes
+  it only to 627 bps. An operator can bound the hook's exposure regardless of what the maths wants.
 
 ### 11.7 The side effect worth advertising
 
