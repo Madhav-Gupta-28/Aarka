@@ -758,3 +758,208 @@ Mint and redeem arbitrage enforce the **sum**. They say nothing about the **spli
 Where `P(f)` sits relative to `P(u)` is a market opinion about volatility, and the first minter of a series is a price-setter rather than a price-taker. This is a real cold-start problem and should not be papered over.
 
 The front end shows an indicative Black-Scholes reference, computed off-chain, **clearly labelled as a model output and not a protocol price**. No contract reads it. It exists so that the first minter has a reference point, not because the protocol has an opinion about fair value.
+
+---
+
+## 11. Module 2 — the Uniswap v4 parity hook
+
+**This module is strictly optional.** The core protocol in §1–§10 is complete, deployable and useful without it. Module 2 is isolated so that a bug in it, or a failure to finish it, cannot affect a single deposited token. Read that as a deliberate risk decision, not a disclaimer.
+
+### 11.1 The problem it solves
+
+Mint and redeem enforce the sum. Nothing enforces the split. Three pools exist:
+
+```
+P1   NVDA  / USDG      already liquid on Robinhood Chain
+P2   fNVDA / USDG      created by Aarka
+P3   uNVDA / USDG      created by Aarka
+```
+
+and `P(f) + P(u) = P(NVDA)` must hold or there is free money on the table. Today that money leaks to whichever searcher is fastest. The hook captures it and gives it to the liquidity providers instead.
+
+### 11.2 Why this is not just another LVR hook
+
+Every arbitrage-capture hook built so far — dynamic-fee designs, auction designs — is trying to capture arbitrage against an **external** reference price it can only estimate. It is guessing at fair value. It can therefore only ever recapture a fraction, and it carries the risk of guessing wrong.
+
+Aarka does not guess. **The vault defines the relationship.** Mint and redeem are exactly 1:1, unconditionally, at any price, with no fee. So the arbitrage is *risk-free and internal*: there is no fair-value estimate anywhere in the trade, only an identity that the vault enforces by construction. The hook can capture 100% of it with certainty.
+
+That is a claim no hook arbitraging against a CEX price can make, and it is the specific novelty being asserted here.
+
+**Prior art, stated honestly.** The general pattern of a v4 hook detecting and executing arbitrage inside `afterSwap` is not new — `sterlingcrispin/arb-hook` is a public implementation. What I could not find prior art for is *identity-enforced redemption arbitrage on a structured-product pair*, which is the risk-free variant. The claim is the application, not the pattern, and it should be written up that way.
+
+### 11.3 Verified v4 mechanics
+
+Checked against `Uniswap/v4-core` tag `v4.0.0`, file `src/libraries/Hooks.sol`:
+
+```solidity
+uint160 internal constant AFTER_SWAP_FLAG = 1 << 6;    // 0x40
+```
+
+Hook permissions are encoded in the **low 14 bits of the hook's own address**, so the hook must be deployed to a mined `CREATE2` address whose last bits match its declared permissions. Use `HookMiner` from `v4-periphery`. Budget half a day for this the first time; it is the single most common thing that derails a first v4 hook.
+
+From `src/interfaces/IPoolManager.sol`, the four primitives the hook needs, verbatim:
+
+```solidity
+function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData) external returns (BalanceDelta);
+function donate(PoolKey memory key, uint256 amount0, uint256 amount1, bytes calldata hookData) external returns (BalanceDelta);
+function sync(Currency currency) external;
+function take(Currency currency, address to, uint256 amount) external;
+function settle() external payable returns (uint256 paid);
+```
+
+`swap`, `take` and `settle` are all `onlyWhenUnlocked`. Inside `afterSwap` the PoolManager is **already unlocked**, so the hook calls them directly — it must not, and cannot, call `unlock()` again.
+
+### 11.4 The flow
+
+Installed on P2 and P3. On `afterSwap`:
+
+1. Read `slot0` for all three pools. Three storage reads, cheap.
+2. Compute the deviation of `P(f) + P(u)` from `P(NVDA)`. If it is under `MIN_DEVIATION_BPS`, return immediately. This gate is what keeps ordinary swaps cheap.
+3. Execute the correction, in the profitable direction only:
+   - **sum too high** — buy NVDA in P1, mint at the vault, sell both halves into P2 and P3
+   - **sum too low** — buy both halves in P2 and P3, redeem at the vault, sell NVDA into P1
+4. To touch the vault the hook needs *real tokens*, not deltas. `poolManager.take(NVDA, address(this), amount)` materialises them; after minting, `poolManager.sync(currency)` then transfer then `poolManager.settle()` returns the halves. This is exactly what `take`/`sync`/`settle` exist for.
+5. `poolManager.donate(key, amount0, amount1, "")` pays the profit to in-range LPs.
+6. Assert all deltas are settled and the round trip was net positive, or revert the whole thing.
+
+### 11.5 The three ways this goes wrong, and the guards
+
+**Same-pool reentrancy.** A hook calling `swap()` on the pool it is currently inside re-enters its own `afterSwap` and recurses until gas runs out. Guard: the hook touches only the *other two* pools, plus a transient-storage reentrancy flag. This is a hard invariant, tested explicitly.
+
+**Manipulation-induced arbitrage.** An attacker skews P1 to make the hook trade badly. The vault leg cannot lose — it is 1:1 by construction — so the exposure is confined to the AMM legs. Guards: cap the hook's trade size per swap, and enforce **revert-unless-net-profitable** on the whole round trip. Under flash accounting that invariant is a single check on the summed deltas, and it means the hook cannot be induced into a losing trade at all.
+
+**Displacement risk.** By internalising the arbitrage the hook removes the incentive for external searchers to do it. If the hook is ever disabled or gas-starved, parity drifts *further* than it would have without it. Mitigation: `mint()` and `redeem()` remain permissionless and unchanged, so the manual arbitrage path is always available. The hook is an optimisation over that path, never a replacement for it.
+
+### 11.6 The side effect worth advertising
+
+Because the hook can route through mint and redeem, the three pools behave as **one liquidity surface**. A swapper going USDG to NVDA can be filled through the f and u pools when the direct pool is thin, and vice versa. The f and u pools become additional depth for the underlying rather than fragmenting it.
+
+That is a genuine answer to the cold-start problem, not only a prize-shaped feature.
+
+---
+
+## 12. Threat model
+
+### 12.1 Oracle manipulation
+A Chainlink equity feed is not manipulable by an on-chain actor — there is no pool to push. The realistic oracle risks are **staleness** and **wrong-round selection**, handled in [§7](#7-the-oracle-layer) and [§8.1](#81-pinning-the-round).
+
+### 12.2 Settlement timing
+*Attack:* wait for a favourable move, then call `settle()` and capture the price for your leg.
+*Defence:* `settle()` cannot read the current price at all. It pins the last round at or before expiry ([§8.1](#81-pinning-the-round)). The caller chooses *when* to transact and has no influence over *what price* results.
+
+### 12.3 Wrong-round griefing at a phase boundary
+*Attack:* present the last round of a superseded aggregator phase so the successor check passes vacuously.
+*Defence:* the challenge window ([§8.2](#82-the-challenge-window)), which is monotone, convergent and time-bounded.
+
+### 12.4 Decimals mismatch
+*Attack:* a repointed Chainlink proxy returns 18 decimals; `min(S, K)` becomes `K` for every price; the entire vault pays the floor leg.
+*Defence:* `feed.decimals() == 8` asserted at creation **and** re-asserted at settlement ([§7.6](#76-feed-decimals)).
+
+### 12.5 Rounding extraction
+*Attack:* loop tiny mints and redeems to extract dust.
+*Defence:* mint and redeem are exactly 1:1 with no division, so there is no rounding in either. Division appears only in claims, and always rounds down ([§6](#6-integer-arithmetic-and-rounding)).
+
+### 12.6 Reentrancy
+Robinhood stock tokens are plain ERC-20s with no transfer hooks, so there is no callback surface. Checks-effects-interactions is followed regardless, `SafeERC20` is used throughout, and the balance-delta pattern in [§6.5](#65-deposit-accounting) makes the supply invariant hold even against a token that misbehaves.
+
+### 12.7 The Friday Problem
+The documented, structural reason the previous generation of on-chain options protocols died — Ribbon (became Aevo), Lyra (became Derive), Dopex (became Stryke). They auctioned inventory on a publicly known schedule, so volatility traders front-ran the auction; and they had no secondary market for that inventory, so it was force-sold into roughly five market makers. The result was systematic underpricing that compounded every week.
+
+Aarka has **no auction, no schedule, and no market maker**, and the AMM is itself the secondary market. This is an economic risk that is designed out rather than managed, and it is the reason to believe this generation ends differently.
+
+### 12.8 Cold start
+The genuine open economic risk, stated without spin. Mint/redeem arbitrage fixes the sum from day one, but the *split* has no anchor until someone trades it. The first minter of each series is a price-setter. The mitigations are the indicative model in [§10.4](#104-what-price-discovery-actually-looks-like) and seeding each new series with a small two-sided position; neither is a guarantee.
+
+### 12.9 Admin key compromise
+Bounded by construction to assets registered *after* the compromise ([§9](#9-governance-and-its-limits)). No existing series can be touched.
+
+### 12.10 Regulatory
+This is a real risk for this product category and it is better to write it down than to discover it.
+
+In December 2023 the SEC settled with BarnBridge DAO and its founders Tyler Ward and Troy Murray over the unregistered offer and sale of "structured crypto asset securities" — a total above **$1.7 million**, including **$125,000 personally from each founder**. The order cited social-media promotion of the returns and expressly rejected the argument that a "purportedly decentralized" DAO changed the analysis.
+
+BarnBridge SMART Alpha is the closest structural analogue to Aarka that has been through an enforcement action, so the precedent is directly on point. The design responses that follow from it:
+
+- the protocol takes **no fee** and issues **no governance token**, so there is no revenue stream to characterise as the return on a common enterprise;
+- there is **no yield, no APY and no return figure** anywhere in the interface or the marketing;
+- governance has no power over user funds and cannot be described as managing them ([§9](#9-governance-and-its-limits));
+- promotional material describes the **mechanism**, never an expected return;
+- the underlying Robinhood stock tokens are themselves restricted from US, Canadian, UK and Swiss persons, and the front end should not attempt to widen that distribution.
+
+None of this is legal advice, and none of it is a defence. It is a list of the specific things the SEC cited in the one case that most resembles this one, and the specific design choices made in response.
+
+---
+
+## 13. Invariants
+
+These are the properties the invariant test suite asserts. If any of them can be broken, the protocol is broken.
+
+| # | Invariant | Where enforced |
+| --- | --- | --- |
+| **I1** | Before settlement: `floorSupply == upsideSupply == underlying.balanceOf(series)` | mint/redeem are strictly 1:1:1; [§6.5](#65-deposit-accounting) |
+| **I2** | After settlement: `floorPayoutPerUnit + upsidePayoutPerUnit == 1e18` exactly | complement construction, [§6.1](#61-the-payout-constants) |
+| **I3** | Total paid out over all exits never exceeds `underlying.balanceOf(series)` at settlement | floor-only rounding, [§6.3](#63-the-solvency-proof) |
+| **I4** | `settle()` succeeds at most once; `settlementUpdatedAt` is non-decreasing and always `<= expiry` | [§8.1](#81-pinning-the-round), [§8.2](#82-the-challenge-window) |
+| **I5** | `redeem()` succeeds in every reachable state, including unsettled, post-expiry and oracle-dead | [§5.4](#54-redeem-is-permanent) |
+| **I6** | No caller can withdraw more underlying than the tokens they burn entitle them to, in any ordering | [§6.3](#63-the-solvency-proof) |
+| **I7** | `strike`, `expiry`, `feed`, `underlying` never change after deployment | Solidity `immutable` |
+| **I8** | Governance cannot reduce the underlying balance of any series | no privileged transfer path exists |
+
+---
+
+## 14. Test plan
+
+**Unit.** Every guard, asserted to revert with the right custom error: stale round, round after expiry, round beyond the lookback, successor round before expiry, sequencer down, inside grace period, wrong decimals, paused oracle, corporate action scheduled inside the tenor, zero strike, expiry not on the calendar, unregistered asset, duplicate series.
+
+**Payoff.** Table-driven over the boundaries — `S` far below `K`, `S = K - 1`, `S = K` exactly, `S = K + 1`, `S` far above `K`, `S` at the smallest representable price, `S` at `MAX_STRIKE`. Assert `f + u == 1e18` at each.
+
+**Fuzz.** `mint`, `redeem`, `settle`, `claim` over random amounts, strikes, prices and orderings. 10,000 runs, configured in `foundry.toml`. The property under test is I3.
+
+**Invariant.** A handler exposing mint / redeem / settle / challenge / claimFloor / claimUpside to a random actor set. 512 runs at depth 64, `fail_on_revert = false`. Asserts I1 through I8 after every call.
+
+**Fork.** Against Robinhood Chain mainnet at a pinned block, using a real stock token and a real Chainlink feed. This is the test that catches the things a mock cannot: actual feed decimals, actual round cadence, actual `updatedAt` gaps across a weekend, actual `uiMultiplier` behaviour.
+
+**Corporate action simulation.** Fork at a block before a real multiplier change, roll forward past it, and assert that settlement is unaffected — the empirical check on the proof in [§4](#4-why-corporate-actions-do-not-require-strike-adjustment). This is the highest-value test in the suite because it is the one that validates the least obvious claim.
+
+**Module 2.** Same-pool reentrancy attempt must revert. Manipulated-P1 arbitrage must revert rather than execute at a loss. Deviation below threshold must be a no-op with bounded gas. Every delta settled at the end of every swap.
+
+Target: 100% line and branch coverage on `src/`, enforced in CI via `forge coverage`.
+
+---
+
+## 15. Open items
+
+Everything below must be resolved before mainnet. Each is a blocking item, not a nice-to-have.
+
+| # | Item | Why it blocks | How to resolve |
+| --- | --- | --- | --- |
+| 1 | **Sequencer uptime feed address on Robinhood Chain** | [§7.3](#73-sequencer-uptime) guard cannot run without it | Chainlink L2 sequencer feeds directory, or ask in Robinhood Chain developer support |
+| 2 | **Chainlink feed proxy addresses per ticker** | every series needs one; must not be hard-coded from a blog post | `docs.chain.link/data-feeds/price-feeds/addresses?network=robinhood` — Robinhood's own docs name this the source of truth |
+| 3 | **Stock token addresses, mainnet and testnet** | USDG's mainnet address has no code on testnet, so testnet addresses differ throughout | Robinhood Chain contracts page; verify each with `cast call ... "symbol()(string)"` |
+| 4 | **Whether feeds exist on testnet at all** | Chainlink documents these feeds as mainnet-only. If absent, testnet needs a mock aggregator | probe a known feed address on chain 46630 |
+| 5 | **`TransferWithUIAmount` vs `TransferWithScaledUI`** | ERC-8056 names the first; secondary sources report Robinhood emitting the second | read a real stock token's ABI from Blockscout. Cosmetic for the contracts, load-bearing for the subgraph |
+| 6 | **Exact `oraclePaused()` signature** | probed by `staticcall`, so a wrong selector silently disables the guard | read the deployed token ABI |
+| 7 | **Feed round cadence during a quiet session** | validates `MAX_SETTLEMENT_LOOKBACK = 6 hours` empirically | query historical rounds on a low-volatility day and measure the largest `updatedAt` gap |
+| 8 | **NYSE calendar for the first year of expiries** | [§5.5](#55-expirycalendar) needs concrete timestamps, DST-correct | generate from the published NYSE holiday calendar; unit-test both DST transitions |
+| 9 | **v4-periphery `HookMiner` availability** | Module 2 cannot be deployed without a mined address | `forge install Uniswap/v4-periphery` |
+
+---
+
+## 16. Sources
+
+Primary sources only. Every claim in this document traces to one of these or to a `cast` call reproducible from [§3](#3-verified-chain-facts).
+
+- Robinhood Chain — Stock Tokens: `https://docs.robinhood.com/chain/stock-tokens/`
+- Robinhood Chain — Building with Stock Tokens: `https://docs.robinhood.com/chain/building-with-stock-tokens/`
+- Robinhood Chain — Contracts: `https://docs.robinhood.com/chain/contracts`
+- Robinhood Chain — Oracles & Price Feeds: `https://docs.robinhood.com/chain/oracles-and-price-feeds`
+- Chainlink — Robinhood Tokenized Equities: `https://docs.chain.link/data-feeds/tokenized-equity-feeds/robinhood`
+- Chainlink — Price Feed Addresses: `https://docs.chain.link/data-feeds/price-feeds/addresses?network=robinhood`
+- ERC-8056, Scaled UI Amount Extension: `https://eips.ethereum.org/EIPS/eip-8056`
+- Uniswap v4 Deployments: `https://developers.uniswap.org/docs/protocols/v4/deployments`
+- `Uniswap/v4-core` tag `v4.0.0` — `src/libraries/Hooks.sol`, `src/interfaces/IPoolManager.sol`
+- SEC administrative proceeding, BarnBridge DAO / Tyler Ward / Troy Murray, December 2023
+
+---
+
+*Last verified against live RPC endpoints on 2026-08-29.*
