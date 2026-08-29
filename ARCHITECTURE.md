@@ -224,3 +224,286 @@ ERC-165 interface IDs: `IScaledUIAmount` = `0xa60bf13d`, `IScaledUIAmountNewUIMu
 The multiplier uses **18 decimals** (`1e18` = 1.0x). Stock tokens are **not rebasing** — `balanceOf()` never changes as a result of a corporate action; only the logical share count implied by the multiplier does.
 
 `newUIMultiplier()` and `effectiveAt()` are the load-bearing pair for Aarka. Because a corporate action is announced with a future effective timestamp, Aarka can see one coming and refuse to create a series that would expire inside it, rather than discovering it after the fact.
+
+---
+
+## 4. Why corporate actions do not require strike adjustment
+
+This is the least obvious result in the design and it removes an entire class of complexity, so it is worth proving rather than asserting.
+
+### The problem in traditional markets
+
+A listed option struck at $200 on a stock that does a 2-for-1 split would be worthless overnight if nothing were done — the share price halves to $100 and the call never comes back into the money. Exchanges therefore run an adjustment process: the OCC rewrites strike and contract size on every split, special dividend, spin-off and merger. It is fiddly, it is a common source of disputes, and replicating it on-chain would be the hardest part of this protocol.
+
+Aarka does not have to.
+
+### The proof
+
+Let `E` be the underlying equity price and `M` the ERC-8056 multiplier. Chainlink publishes the **token** price:
+
+```
+P = E x M
+```
+
+**Stock split, 2-for-1.** The equity price halves and the multiplier doubles, because one token now represents twice as many shares:
+
+```
+P' = (E / 2) x (2M) = E x M = P
+```
+
+**Cash dividend, reinvested.** On the ex-date the equity price drops by the dividend `D`. Robinhood reinvests, so each token comes to represent more shares by the factor `E / (E - D)`:
+
+```
+P' = (E - D) x M x E / (E - D) = E x M = P
+```
+
+In both cases the token price is **unchanged across the event**. The multiplier exists precisely to absorb the discontinuity in `E` so that `P` stays continuous.
+
+### The consequence
+
+Aarka's strike `K` is denominated in the token price `P`, which is the quantity Chainlink publishes. Since `P` is continuous through splits and reinvested dividends, **`K` needs no adjustment for them.** The Robinhood stock token is a total-return instrument, and a strike written against a total-return instrument is already whole.
+
+This is why [§3.5](#35-chainlink-feeds) matters so much. If Aarka applied the multiplier itself, it would double-count it and every settlement after a corporate action would be wrong. The correct code is the code that does nothing.
+
+### Where the result stops
+
+The proof holds for any corporate action a **scalar multiplier can express**. It does not hold for actions that transfer value out of the instrument entirely — a spin-off hands shareholders stock in a new company, and no single number on the original token can represent that.
+
+Robinhood's own contract acknowledges this. Its documentation describes two update paths: small updates with no price discontinuity, applied immediately; and **large updates with price discontinuity, which require a scheduled pause window and manual confirmation before unpause.**
+
+So the rule Aarka implements is:
+
+- **Continuous multiplier changes** (splits, reinvested dividends) — ignore entirely. The proof above covers them.
+- **Discontinuous changes** (announced via `newUIMultiplier()` / `effectiveAt()`, or signalled by `oraclePaused()`) — refuse to settle, and refuse to create new series that would expire inside the window. See [§7.4](#74-corporate-action-guard).
+
+The design does not attempt to price a spin-off. It detects one and steps out of the way, leaving `redeem()` — which is always value-neutral — as the exit.
+
+---
+
+## 5. Contract architecture
+
+Five contracts. No proxies, no upgradeability, no admin key over user funds.
+
+```
+                       AarkaFactory
+                   (asset registry, series creation)
+                             |
+              +--------------+--------------+
+              |                             |
+       ExpiryCalendar                  AarkaSeries              <- one per (underlying, strike, expiry)
+    (valid expiry timestamps)          /          \
+                                 AarkaToken    AarkaToken
+                                   (floor)       (upside)
+
+                       AarkaParityHook            <- Module 2, optional, isolated
+                    (Uniswap v4 afterSwap)
+```
+
+### 5.1 AarkaSeries — the vault
+
+One instance per `(underlying, strike, expiry)` triple. It holds the deposited stock tokens and nothing else. It is **immutable and isolated**: a series has no knowledge of any other series, shares no storage, and cannot be drained by a failure elsewhere. There is no cross-collateralisation because there is no collateral — only deposits.
+
+```solidity
+interface IAarkaSeries {
+    // --- immutable identity ---
+    function underlying() external view returns (IERC20);
+    function feed() external view returns (AggregatorV3Interface);
+    function strike() external view returns (uint256);   // 8 decimals, matches the feed
+    function expiry() external view returns (uint64);    // unix seconds
+    function floorToken() external view returns (IAarkaToken);
+    function upsideToken() external view returns (IAarkaToken);
+
+    // --- lifecycle ---
+    function mint(uint256 amount, address to) external;
+    function redeem(uint256 amount, address to) external;          // always open
+    function settle(uint80 roundId) external;
+    function challengeSettlement(uint80 betterRoundId) external;
+    function claimFloor(uint256 amount, address to) external returns (uint256 paid);
+    function claimUpside(uint256 amount, address to) external returns (uint256 paid);
+
+    // --- settlement state ---
+    function settled() external view returns (bool);
+    function settlementPrice() external view returns (uint256);      // 8 decimals
+    function floorPayoutPerUnit() external view returns (uint256);   // 18 decimals
+    function upsidePayoutPerUnit() external view returns (uint256);  // 18 decimals
+    function claimsUnlockAt() external view returns (uint64);
+}
+```
+
+All of `underlying`, `feed`, `strike`, `expiry`, `floorToken` and `upsideToken` are Solidity `immutable`. They live in bytecode, cost no storage read, and cannot be changed by anyone including the deployer.
+
+The two token contracts are deployed inside the series constructor, so the series learns their addresses without a circular dependency and each token learns its series from `msg.sender`.
+
+### 5.2 AarkaToken — the halves
+
+A deliberately minimal ERC-20. `mint` and `burn` are callable only by the series that deployed it. It has no owner, no pause, no blocklist and no upgrade path.
+
+```solidity
+interface IAarkaToken is IERC20 {
+    function series() external view returns (address);
+    function mint(address to, uint256 amount) external;   // onlySeries
+    function burn(address from, uint256 amount) external; // onlySeries
+}
+```
+
+Naming follows the Pendle convention, which the market already reads:
+
+```
+symbol   fNVDA-26SEP          uNVDA-26SEP
+name     Aarka Floor NVDA 26SEP26 $200    Aarka Upside NVDA 26SEP26 $200
+```
+
+The strike goes in `name()` rather than `symbol()`. Symbols must stay short enough to render in a DEX interface; the strike is the thing a user must not get wrong, so it goes where there is room to spell it out.
+
+The `f` and `u` prefixes are deliberate. The `m` prefix was rejected because Mirror Protocol's `mAAPL` and `mTSLA` are the direct subject of an SEC enforcement action, and inheriting that association would be an unforced error for a product built on tokenized equities.
+
+### 5.3 AarkaFactory — creation and the asset registry
+
+```solidity
+interface IAarkaFactory {
+    function createSeries(address underlying, uint256 strike, uint64 expiry)
+        external returns (address series);
+
+    function seriesFor(address underlying, uint256 strike, uint64 expiry)
+        external view returns (address);          // CREATE2 address, deployed or not
+
+    function feedFor(address underlying) external view returns (address);
+    function isSeries(address) external view returns (bool);
+}
+```
+
+Series are deployed with `CREATE2` under `salt = keccak256(abi.encode(underlying, strike, expiry))`, so the address is a pure function of the terms. A duplicate series is impossible — the second deployment reverts on address collision — and any integrator can compute a series address off-chain without a subgraph.
+
+**Creation is permissionless in one dimension and governed in the other.** Anyone may create any `(strike, expiry)` pair. Nobody may choose the price feed: the factory looks it up from a governed `underlying -> feed` registry, and reverts if the asset is not registered.
+
+This split is the important security decision in the factory. The dangerous freedom is not "what strike" — a silly strike hurts only the person who uses it, and the series is isolated. The dangerous freedom is "what feed," because a series pointed at an attacker-controlled feed is a machine for stealing the deposit. So that one degree of freedom is removed and every other one is left open.
+
+Creation additionally requires:
+
+| Check | Reason |
+| --- | --- |
+| `feedFor(underlying) != 0` | asset is registered |
+| `feed.decimals() == 8` | strike and price share a base ([§6](#6-integer-arithmetic-and-rounding)) |
+| `calendar.isValidExpiry(expiry)` | expiry is a real market close ([§7.5](#75-expiry-timing)) |
+| `expiry >= block.timestamp + MIN_TENOR` | no same-block expiries |
+| `expiry <= block.timestamp + MAX_TENOR` | bounds oracle risk |
+| `0 < strike <= MAX_STRIKE` | overflow bound, see [§6](#6-integer-arithmetic-and-rounding) |
+| no corporate action scheduled before expiry | [§7.4](#74-corporate-action-guard) |
+| `!oraclePaused()` | asset is not mid-event |
+| strike within `[spot/5, spot*5]` | fat-finger guard, not a safety property |
+
+### 5.4 redeem() is permanent
+
+`redeem()` — return one floor and one upside token, receive one underlying — is **never disabled**. Not at expiry, not after settlement, not if the oracle dies.
+
+This is safe because of the conservation result in [§2](#2-the-payoff-proven). After settlement the two halves are worth `floorPayoutPerUnit + upsidePayoutPerUnit`, which is exactly `1e18` by construction ([§6](#6-integer-arithmetic-and-rounding)). Redeeming the pair for one underlying therefore pays exactly what claiming both halves separately would pay, minus the rounding dust. It can never pay more.
+
+The consequence is the protocol's escape hatch, and it costs nothing to provide:
+
+> **If the oracle is permanently broken, or settlement never happens, no funds are stuck.** Anyone holding both halves withdraws their stock token at any time. Anyone holding one half buys the other on the AMM and withdraws. No admin, no timelock, no emergency multisig, no governance vote.
+
+There is no `pause()` on a series and no privileged withdrawal. That is not an oversight; it is the reason none is needed.
+
+### 5.5 ExpiryCalendar
+
+A governed list of valid expiry timestamps.
+
+```solidity
+interface IExpiryCalendar {
+    function isValidExpiry(uint64 timestamp) external view returns (bool);
+    function addExpiries(uint64[] calldata timestamps) external;   // onlyGovernance
+}
+```
+
+An expiry must land on a US equity market close, because that is the only moment the Chainlink feed is guaranteed to be fresh ([§7.5](#75-expiry-timing)). The market close cannot be computed on-chain: it depends on the NYSE holiday calendar, on early-close days, and on US daylight saving transitions, which move 4:00 PM ET between 20:00 and 21:00 UTC.
+
+Hard-coding a UTC cadence would silently drift by an hour twice a year and would settle on Thanksgiving. Publishing the calendar is the honest solution and it is what exchanges themselves do.
+
+Governance can only **add** timestamps. It cannot remove one, so a series that already exists can never have its expiry invalidated. The worst a hostile calendar operator can do is refuse to add future dates, which stops new series from being created and does nothing to existing ones.
+
+---
+
+## 6. Integer arithmetic and rounding
+
+The entire solvency argument is here. It has to be exactly right.
+
+### 6.1 The payout constants
+
+At settlement, with price `S` (8 decimals) and strike `K` (8 decimals):
+
+```solidity
+uint256 constant ONE = 1e18;
+
+// floor: min(S, K) / S, rounded DOWN
+uint256 fp = Math.mulDiv(Math.min(S, K), ONE, S);   // in [0, 1e18]
+
+// upside: the exact complement, never computed independently
+uint256 up = ONE - fp;
+```
+
+**The upside leg is defined as the complement, not as `max(0, S-K)/S`.** Computing both by division would give two independently-floored values whose sum could be `1e18 - 1`, permanently stranding dust and, worse, making the sum a value that has to be reasoned about rather than known. Defining `up = ONE - fp` makes
+
+```
+fp + up == 1e18     exactly, by construction, in every case
+```
+
+an identity the compiler enforces rather than a property the tests hope for.
+
+**Bound check.** `fp <= 1e18` always:
+- if `S <= K` then `min(S,K) = S` and `mulDiv(S, 1e18, S) = 1e18` exactly, so `up = 0`;
+- if `S > K` then `min(S,K) = K < S`, so `mulDiv(K, 1e18, S) < 1e18`, so `up > 0`.
+
+`ONE - fp` therefore never underflows.
+
+`Math.mulDiv` (OpenZeppelin) computes the 512-bit intermediate product, so `min(S,K) * 1e18` cannot overflow regardless of inputs. The `MAX_STRIKE` bound in [§5.3](#53-aarkafactory--creation-and-the-asset-registry) is defence in depth, not the primary protection.
+
+### 6.2 Per-holder claims
+
+```solidity
+paid = Math.mulDiv(amount, fp, ONE);   // or up, floored, always down
+```
+
+Every claim rounds **down**. The remainder stays in the vault. No claim path rounds up, anywhere, ever.
+
+### 6.3 The solvency proof
+
+Let `N` be the supply of each token at the moment of settlement. Invariant **I1** ([§13](#13-invariants)) gives `floorSupply == upsideSupply == underlying.balanceOf(series) == N` at that instant.
+
+Each unit of floor token can be burned exactly once, for at most `fp / 1e18` of the underlying. Each unit of upside token likewise, for at most `up / 1e18`. Redeeming a pair burns one of each and pays exactly `1`, which equals `(fp + up) / 1e18`. So every exit path pays at most the linear bound, and:
+
+```
+total paid  <=  (N x fp + N x up) / 1e18
+            =   N x (fp + up) / 1e18
+            =   N x 1e18 / 1e18
+            =   N
+            =   underlying.balanceOf(series)
+```
+
+with strict inequality whenever any claim floors. **The vault can never pay out more than it holds, at any price, in any order, under any mix of claim and redeem.** The residue is dust that stays in the contract permanently; there is no sweep function, because a sweep would be a privileged withdrawal path and the protocol does not have one.
+
+### 6.4 Decimals, written out
+
+```
+underlying amount   18 decimals
+feed price S         8 decimals
+strike K             8 decimals   <- deliberately matched to the feed
+payout per unit     18 decimals   <- a ratio, base 1e18
+uiMultiplier        18 decimals   <- read as a signal only, never multiplied in
+USDG                 6 decimals   <- Module 2 and front end only
+```
+
+`S` and `K` share a base, so `min(S, K)` is a direct comparison with no scaling. This is the reason the factory rejects any feed whose `decimals()` is not 8: a 18-decimal feed would make `min(S,K)` compare a price against a number 10^10 times smaller and silently settle every series at the floor.
+
+### 6.5 Deposit accounting
+
+`mint()` measures the balance before and after the transfer and mints the **observed delta**, not the requested amount:
+
+```solidity
+uint256 before = underlying.balanceOf(address(this));
+underlying.safeTransferFrom(msg.sender, address(this), amount);
+uint256 received = underlying.balanceOf(address(this)) - before;
+floorToken.mint(to, received);
+upsideToken.mint(to, received);
+```
+
+Robinhood stock tokens are plain ERC-20s with no transfer fee, so `received == amount` today. The delta pattern costs one extra `SLOAD` and makes invariant I1 hold by construction rather than by assumption — if the token ever gains a transfer fee, or if a series is somehow pointed at a token that has one, the vault stays solvent instead of over-minting.
