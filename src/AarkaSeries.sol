@@ -326,6 +326,12 @@ contract AarkaSeries is ReentrancyGuardTransient {
         if (address(sequencerUptime) == address(0)) return; // see ARCHITECTURE.md appendix A.3
         (, int256 up, uint256 startedAt,,) = sequencerUptime.latestRoundData();
         if (up != 0) revert SequencerDown();
+
+        // A feed that has never reported returns startedAt == 0, and `block.timestamp - 0` is
+        // enormous, so the grace check below would wave it straight through. An uninitialised or
+        // future-dated feed is not evidence the sequencer is healthy; treat it as evidence of
+        // nothing and refuse. Refusing costs only the payoff split -- redeem stays open either way.
+        if (startedAt == 0 || startedAt > block.timestamp) revert SequencerDown();
         if (block.timestamp - startedAt <= SEQUENCER_GRACE_PERIOD) revert SequencerGracePeriod();
     }
 

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import {AarkaFactory} from "./AarkaFactory.sol";
@@ -173,8 +174,10 @@ contract AarkaLens {
         p.redeemable = p.floorBalance < p.upsideBalance ? p.floorBalance : p.upsideBalance;
 
         if (series.settled()) {
-            p.floorClaimable = p.floorBalance * series.floorPayoutPerUnit() / 1e18;
-            p.upsideClaimable = p.upsideBalance * series.upsidePayoutPerUnit() / 1e18;
+            // Math.mulDiv, matching AarkaSeries exactly, so a quote can never disagree with the
+            // settlement it is quoting.
+            p.floorClaimable = Math.mulDiv(p.floorBalance, series.floorPayoutPerUnit(), 1e18);
+            p.upsideClaimable = Math.mulDiv(p.upsideBalance, series.upsidePayoutPerUnit(), 1e18);
         }
     }
 
@@ -193,7 +196,7 @@ contract AarkaLens {
         if (price == 0) return (0, 0);
         uint256 strike = AarkaSeries(s).strike();
         uint256 min = price < strike ? price : strike;
-        floorPayout = min * 1e18 / price;
+        floorPayout = Math.mulDiv(min, 1e18, price);
         upsidePayout = 1e18 - floorPayout;
     }
 

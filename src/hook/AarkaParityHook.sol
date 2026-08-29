@@ -124,6 +124,7 @@ contract AarkaParityHook is IHooks, Ownable {
     error HookNotImplemented();
     error NoProfitableSize();
     error UnknownPool();
+    error UnexpectedDelta();
 
     constructor(IPoolManager poolManager_, AarkaSeries series_, Currency quote_, address owner_)
         Ownable(owner_)
@@ -409,6 +410,10 @@ contract AarkaParityHook is IHooks, Ownable {
 
     function _settleDebt(Currency c) private {
         int256 d = poolManager.currencyDelta(address(this), c);
+        // Every call site reaches here holding a debt, but `uint256(-d)` on a credit would produce
+        // an enormous number and try to transfer it. Assert the sign rather than rely on the
+        // call order staying correct through future edits.
+        if (d >= 0) revert UnexpectedDelta();
         uint256 owed = uint256(-d);
         poolManager.sync(c);
         IERC20(Currency.unwrap(c)).safeTransfer(address(poolManager), owed);
