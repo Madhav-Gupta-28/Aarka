@@ -53,6 +53,15 @@ contract AarkaFactory is Ownable {
     mapping(address => bool) public isSeries;
     address[] public allSeries;
 
+    /// @notice The series deployed for a given (underlying, strike, expiry), keyed by its salt.
+    /// @dev The authoritative record. The CREATE2 address is a function of the constructor
+    ///      arguments, which include the feed and the sequencer feed -- both of which governance
+    ///      can change. Deriving "does this series exist" from the computed address therefore
+    ///      stopped being reliable the moment either was updated, which let the same terms be
+    ///      deployed twice under byte-identical symbols on different oracles. Recording it removes
+    ///      the dependence on mutable state entirely.
+    mapping(bytes32 salt => address) public deployedSeries;
+
     bool public creationPaused;
 
     // --------------------------------------------------------------------
@@ -144,12 +153,13 @@ contract AarkaFactory is Ownable {
         _requireStrikeInBand(feed, strike);
 
         bytes32 salt = keccak256(abi.encode(underlying, strike, expiry));
-        if (seriesFor(underlying, strike, expiry).code.length != 0) revert SeriesExists();
+        if (deployedSeries[salt] != address(0)) revert SeriesExists();
 
         series = address(
             new AarkaSeries{salt: salt}(IERC20(underlying), feed, sequencerUptime, strike, expiry)
         );
 
+        deployedSeries[salt] = series;
         isSeries[series] = true;
         allSeries.push(series);
 
@@ -167,9 +177,23 @@ contract AarkaFactory is Ownable {
     // Views
     // --------------------------------------------------------------------
 
-    /// @notice The deterministic address of a series, whether or not it has been deployed.
-    /// @dev Lets any integrator resolve a series off-chain with no subgraph and no event scan.
+    /// @notice The series for these terms, or where one would be deployed today.
+    /// @dev Once a series exists this returns the recorded address and never changes again. Before
+    ///      it exists it returns the CREATE2 prediction, which depends on the feed and sequencer
+    ///      feed currently registered and therefore moves if governance changes either.
     function seriesFor(address underlying, uint256 strike, uint64 expiry) public view returns (address) {
+        address deployed = deployedSeries[keccak256(abi.encode(underlying, strike, expiry))];
+        if (deployed != address(0)) return deployed;
+        return predictSeries(underlying, strike, expiry);
+    }
+
+    /// @notice Where a series with these terms would be deployed if created in this block.
+    /// @dev Purely the CREATE2 computation. Use `seriesFor` to resolve an existing series.
+    function predictSeries(address underlying, uint256 strike, uint64 expiry)
+        public
+        view
+        returns (address)
+    {
         bytes32 salt = keccak256(abi.encode(underlying, strike, expiry));
         bytes32 initCodeHash = keccak256(
             abi.encodePacked(

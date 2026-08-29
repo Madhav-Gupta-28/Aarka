@@ -79,6 +79,13 @@ contract AarkaParityHook is IHooks, Ownable {
     PoolKey public upsideKey;
     bool public wired;
 
+    /// @notice The pools this hook is willing to act for.
+    /// @dev v4 pools are permissionless and any pool may name any hook, so `afterSwap` can be
+    ///      triggered by a pool the hook has never heard of. Without this set, the profit would be
+    ///      donated to whichever pool called — letting anyone stand up a pool nobody else uses,
+    ///      point it here, and have Aarka's arbitrage revenue paid into it.
+    mapping(PoolId => bool) public isWiredPool;
+
     /// @notice Binary-search steps used to solve for the parity-restoring trade size.
     /// @dev 20 halvings resolve the size to roughly one part in a million of the cap, which is far
     ///      finer than the fee tier. Each step is pure arithmetic on state read once up front, so
@@ -116,6 +123,7 @@ contract AarkaParityHook is IHooks, Ownable {
     error NotProfitable();
     error HookNotImplemented();
     error NoProfitableSize();
+    error UnknownPool();
 
     constructor(IPoolManager poolManager_, AarkaSeries series_, Currency quote_, address owner_)
         Ownable(owner_)
@@ -151,6 +159,9 @@ contract AarkaParityHook is IHooks, Ownable {
         underlyingKey = underlyingKey_;
         floorKey = floorKey_;
         upsideKey = upsideKey_;
+        isWiredPool[underlyingKey_.toId()] = true;
+        isWiredPool[floorKey_.toId()] = true;
+        isWiredPool[upsideKey_.toId()] = true;
         wired = true;
 
         emit Wired(underlyingKey_.toId(), floorKey_.toId(), upsideKey_.toId());
@@ -199,6 +210,11 @@ contract AarkaParityHook is IHooks, Ownable {
     /// @notice External only so `afterSwap` can wrap it in try/catch. Callable by nobody else.
     function restoreParity(PoolKey calldata triggerKey) external {
         if (msg.sender != address(this)) revert NotSelf();
+
+        // The pool that triggered this must be one of ours. Anyone can create a v4 pool naming
+        // this hook, and the profit is paid to the triggering pool's LPs, so without this check
+        // a pool the attacker solely provides is a free claim on the protocol's arbitrage.
+        if (!isWiredPool[triggerKey.toId()]) revert UnknownPool();
 
         uint256 pUnder = _priceX96(underlyingKey, underlyingCurrency);
         uint256 pFloor = _priceX96(floorKey, floorCurrency);
