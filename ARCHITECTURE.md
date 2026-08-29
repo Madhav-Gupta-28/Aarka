@@ -507,3 +507,254 @@ upsideToken.mint(to, received);
 ```
 
 Robinhood stock tokens are plain ERC-20s with no transfer fee, so `received == amount` today. The delta pattern costs one extra `SLOAD` and makes invariant I1 hold by construction rather than by assumption — if the token ever gains a transfer fee, or if a series is somehow pointed at a token that has one, the vault stays solvent instead of over-minting.
+
+---
+
+## 7. The oracle layer
+
+A tokenized-equity feed is not a crypto feed and cannot be read like one. Four of the six guards below exist because of properties specific to Robinhood's feeds, and a project that reads `latestRoundData()` the way it would read ETH/USD will settle wrong prices on quiet days without ever reverting.
+
+### 7.1 The naive read is wrong
+
+```solidity
+(, int256 price,,,) = feed.latestRoundData();   // never do this
+```
+
+Three separate failures:
+
+1. **It has no staleness check.** Robinhood equity feeds are 24/5 and, in Chainlink's words, "do not have heartbeats during off-hours." At 3am on a Sunday the call succeeds and returns Friday's close. Nothing reverts.
+2. **It reads the price now, not the price at expiry.** Whoever calls `settle()` chooses when, and therefore chooses the price. A caller who waits for a favourable move steals from the other leg. Settlement must be pinned to expiry, not to the transaction.
+3. **It ignores the sequencer.** On an Orbit L2 a stalled sequencer freezes feed updates while every read keeps succeeding.
+
+### 7.2 Price validity
+
+```solidity
+require(answer > 0, "invalid price");      // an equity price is never zero or negative
+require(updatedAt != 0, "incomplete round");
+```
+
+`answer` is `int256` and must be cast only after the positivity check.
+
+### 7.3 Sequencer uptime
+
+Robinhood Chain is an Arbitrum Orbit L2. Chainlink's L2 pattern applies:
+
+```solidity
+(, int256 seq, uint256 startedAt,,) = sequencerUptime.latestRoundData();
+require(seq == 0, "sequencer down");                        // 0 = up, 1 = down
+require(block.timestamp - startedAt > GRACE_PERIOD, "grace period");
+```
+
+`GRACE_PERIOD` is 3600 seconds. The grace period exists because the instant a sequencer restarts, users who were unable to transact during the outage have not yet had a chance to react, while the feed has already caught up. Settling in that window would execute against a price that nobody could trade at.
+
+The sequencer uptime feed address on Robinhood Chain is **UNVERIFIED** — see [§15](#15-open-items). Until it is confirmed, the series takes it as a constructor argument and skips the check when the address is zero, with that fact emitted in an event at deployment so it is visible on-chain rather than hidden in a config file.
+
+### 7.4 Corporate action guard
+
+Read as a **signal**, never as a price input ([§3.5](#35-chainlink-feeds), [§4](#4-why-corporate-actions-do-not-require-strike-adjustment)).
+
+At **series creation** the factory requires:
+
+```solidity
+!oraclePaused()                                    // not mid-event right now
+effectiveAt() == 0 || effectiveAt() > expiry       // no announced action inside the tenor
+```
+
+`newUIMultiplier()` / `effectiveAt()` are ERC-8056's required pending-multiplier extension, and they are what make this checkable in advance: a corporate action is announced with a future effective timestamp, so a series can simply refuse to be written across one.
+
+`oraclePaused()` is a Robinhood addition, not part of ERC-8056, so the factory probes it with a `staticcall` at creation and records whether it exists as an immutable flag on the series. A missing function is recorded as absent rather than treated as an error, so the protocol still works if Robinhood ships a token without it.
+
+At **settlement** the series requires `!oraclePaused()` again.
+
+### 7.5 Expiry timing, and why the lookback bound is the real pause detector
+
+Expiries are restricted to US equity market closes ([§5.5](#55-expirycalendar)) for one reason: that is the only moment the feed is reliably fresh. Outside market hours the feed holds its last value and a settlement would be reading a price from an arbitrary time in the past.
+
+The settlement round must then satisfy:
+
+```solidity
+require(updatedAt <= expiry, "round is after expiry");
+require(expiry - updatedAt <= MAX_SETTLEMENT_LOOKBACK, "round too far before expiry");
+```
+
+`MAX_SETTLEMENT_LOOKBACK` is **6 hours**. The reasoning is specific rather than arbitrary: a regular US session runs 09:30 to 16:00 ET, which is six and a half hours. A six-hour bound therefore guarantees the settlement round was published **during the same trading session** as the close it settles against, while still tolerating a quiet stock whose deviation-threshold feed did not update for several hours.
+
+This single bound does more work than it appears to, and it is worth being explicit about why:
+
+> **The lookback bound is also the corporate-action pause detector.** While `oraclePaused()` is true the feed stops publishing. If expiry falls inside a pause, no round exists within six hours before it, so `settle()` reverts on its own. No historical pause lookup is required, and none is possible on-chain anyway.
+
+It is likewise the off-hours detector, the sequencer-outage detector, and the feed-deprecation detector. Any condition that stops the feed from publishing near expiry blocks settlement, and blocked settlement is safe because `redeem()` is permanent ([§5.4](#54-redeem-is-permanent)).
+
+The tradeoff is stated plainly: too tight a bound makes settlement fail on quiet days; too loose accepts a price from a different session. Six hours is the value at which the bound is provably within one session.
+
+### 7.6 Feed decimals
+
+Checked at creation **and** re-checked at settlement:
+
+```solidity
+require(feed.decimals() == 8, "unexpected feed decimals");
+```
+
+A Chainlink proxy can be repointed to a new aggregator by Chainlink governance. Decimals are stable in practice, but a series that settles a strike expressed in 8 decimals against an 18-decimal price would compute `min(S, K) = K` for every conceivable price and pay the entire vault to the floor leg. The re-check costs one `STATICCALL` and removes a total-loss scenario.
+
+---
+
+## 8. Settlement
+
+### 8.1 Pinning the round
+
+`settle()` takes a `roundId` rather than reading the latest price. The caller supplies a candidate; the contract proves it is the right one.
+
+```solidity
+function settle(uint80 roundId) external {
+    require(block.timestamp >= expiry, "not expired");
+    require(!settled, "already settled");
+    _requireSequencerUp();
+    _requireFeedSane();          // decimals == 8, not oraclePaused
+    (uint256 S, uint256 updatedAt) = _readRound(roundId);
+
+    require(updatedAt <= expiry,                             "round after expiry");
+    require(expiry - updatedAt <= MAX_SETTLEMENT_LOOKBACK,   "round too old");
+    _requireIsLastRoundAtOrBefore(roundId, expiry);
+
+    settlementPrice      = S;
+    settlementUpdatedAt  = updatedAt;
+    floorPayoutPerUnit   = Math.mulDiv(Math.min(S, strike), 1e18, S);
+    upsidePayoutPerUnit  = 1e18 - floorPayoutPerUnit;
+    claimsUnlockAt       = uint64(block.timestamp) + CHALLENGE_PERIOD;
+    settled              = true;
+    emit Settled(roundId, S, updatedAt, floorPayoutPerUnit);
+}
+```
+
+`_requireIsLastRoundAtOrBefore` checks that round `roundId + 1` either does not exist or was published after expiry:
+
+```solidity
+try feed.getRoundData(roundId + 1) returns (uint80, int256, uint256, uint256 nextUpdatedAt, uint80) {
+    if (nextUpdatedAt != 0) require(nextUpdatedAt > expiry, "a later round exists at or before expiry");
+} catch {
+    // no successor round: roundId was the latest. Accept.
+}
+```
+
+The `try/catch` is required, not defensive padding. A Chainlink proxy `roundId` is the composite `(phaseId << 64) | aggregatorRoundId`. At a phase boundary — which happens when Chainlink migrates the underlying aggregator — `roundId + 1` is a well-formed identifier that does not exist, and `getRoundData` reverts rather than returning zeros. Without the catch, every series whose expiry lands near an aggregator migration would be permanently unsettleable.
+
+### 8.2 The challenge window
+
+The phase-boundary case above is exactly where the pinning check is weakest: a caller could present the last round of an old phase and have the successor check pass vacuously, even though a later, more correct round exists in the new phase.
+
+So settlement is provisional for `CHALLENGE_PERIOD` (1 hour), during which anyone may replace it with a strictly better round:
+
+```solidity
+function challengeSettlement(uint80 betterRoundId) external {
+    require(settled && block.timestamp < claimsUnlockAt, "window closed");
+    (uint256 S2, uint256 u2) = _readRound(betterRoundId);
+    require(u2 <= expiry,                "after expiry");
+    require(u2 >  settlementUpdatedAt,   "not an improvement");
+    // recompute price and payout constants; claimsUnlockAt is NOT extended
+}
+```
+
+Three properties make this safe:
+
+- **It converges.** Every successful challenge strictly increases `settlementUpdatedAt`, and only finitely many rounds precede expiry, so the process terminates at the true last round.
+- **It is monotone.** Settlement can only move *towards* expiry, never away. There is no way to walk the price backwards to a more favourable time.
+- **It is bounded.** A challenge does not extend `claimsUnlockAt`, so no amount of challenging can delay claims beyond one hour.
+
+The lookback bound needs no re-check during a challenge: any round later than one that already passed it is necessarily closer to expiry.
+
+Claims unlock at `claimsUnlockAt`. `redeem()` is unaffected and remains open throughout — a holder of both halves never waits for a challenge window.
+
+### 8.3 Claiming
+
+```solidity
+function claimFloor(uint256 amount, address to) external returns (uint256 paid) {
+    require(settled && block.timestamp >= claimsUnlockAt, "not claimable");
+    floorToken.burn(msg.sender, amount);
+    paid = Math.mulDiv(amount, floorPayoutPerUnit, 1e18);
+    underlying.safeTransfer(to, paid);
+}
+```
+
+`claimUpside` is identical with `upsidePayoutPerUnit`. Both round down ([§6.2](#62-per-holder-claims)). Burning before transferring follows checks-effects-interactions; the underlying is a plain ERC-20 with no callback, but the ordering is free.
+
+A `paid` of zero is legal and does not revert — an upside token that finished out of the money is genuinely worth nothing, and reverting would leave holders unable to burn a worthless token out of their wallet.
+
+### 8.4 If settlement never happens
+
+Nothing breaks. `redeem()` stays open forever ([§5.4](#54-redeem-is-permanent)). The failure mode of the entire oracle stack is "the split does not resolve and everyone gets their share back," which requires no intervention from anyone.
+
+---
+
+## 9. Governance and its limits
+
+Governance is a single `owner` address, intended to be a multisig, with exactly three powers:
+
+| Power | Effect | Bounded by |
+| --- | --- | --- |
+| `registerAsset(underlying, feed)` | allows new series on an asset | cannot change an existing series; series store the feed as an immutable |
+| `addExpiries(uint64[])` | adds valid expiry dates | add-only; cannot invalidate an existing series |
+| `setCreationPaused(bool)` | stops new series being created | does not touch existing series at all |
+
+What governance **cannot** do, by construction rather than by policy:
+
+- move, freeze, or withdraw a single token from any series;
+- change a strike, an expiry, a feed, or a payout on a series that exists;
+- pause `mint`, `redeem`, `settle`, or `claim` on a series that exists;
+- upgrade any contract — there are no proxies anywhere in the system;
+- prevent settlement, or force one.
+
+The strongest attack available to a fully compromised owner key is to register a malicious feed and mislead users into depositing into a *new* series. Every series created before the compromise is untouched, because the feed is baked into bytecode at deployment. The blast radius of the admin key is bounded to assets registered after the key is stolen.
+
+Front ends should surface `series.feed()` and let a user confirm it against Chainlink's published address before depositing. That check is the entire trust assumption in the system, and it is one `eth_call`.
+
+---
+
+## 10. User flows
+
+### 10.1 The holder who wants downside protection
+
+Owns 100 NVDA tokens at $215. Wants to keep the stock but not the drawdown.
+
+```
+1. mint(100)                  -> 100 fNVDA-26SEP  +  100 uNVDA-26SEP
+2. sell 100 uNVDA on Uniswap  -> receives USDG today
+3. holds 100 fNVDA
+```
+
+They now hold a position worth `min(S, K)` at expiry plus cash received up front. They have sold the upside above $230 and been paid for it immediately. Nothing can be liquidated, and there is no margin to maintain.
+
+This is the flow that makes the protocol bootstrap **single-sided**. The user needs no counterparty, no order book, and no capital beyond the shares they already owned. They are not depositing to earn a fee; they are restructuring a position they already have and taking cash for the part they did not want.
+
+### 10.2 The buyer who wants leverage without borrowing
+
+Wants exposure to NVDA above $230 and has $500.
+
+```
+1. buy uNVDA-26SEP on Uniswap with USDG
+2. hold to expiry, or sell any time
+3. claimUpside() -> max(0, S - K) / S of a token
+```
+
+Convex exposure, capped loss at the purchase price, no borrowing, no liquidation price, no funding rate, no maintenance margin. The token cannot be taken from them by an adverse move — the worst case is that it settles at zero, which was known and bounded when they bought it.
+
+Contrast with the leveraged perp wrapper this competes against: linear payoff, liquidatable, and a funding rate that runs against the holder.
+
+### 10.3 The arbitrageur
+
+Enforces the identity `P(f) + P(u) = P(NVDA)`.
+
+```
+if  P(f) + P(u)  >  P(NVDA):    buy NVDA, mint, sell both halves
+if  P(f) + P(u)  <  P(NVDA):    buy both halves, redeem, sell NVDA
+```
+
+Both directions are **risk-free against the vault**, because mint and redeem are exactly 1:1 at all times with no fee and no price dependence. The only risk is execution on the AMM legs. This is the flow Module 2 internalises.
+
+### 10.4 What price discovery actually looks like
+
+Mint and redeem arbitrage enforce the **sum**. They say nothing about the **split**.
+
+Where `P(f)` sits relative to `P(u)` is a market opinion about volatility, and the first minter of a series is a price-setter rather than a price-taker. This is a real cold-start problem and should not be papered over.
+
+The front end shows an indicative Black-Scholes reference, computed off-chain, **clearly labelled as a model output and not a protocol price**. No contract reads it. It exists so that the first minter has a reference point, not because the protocol has an opinion about fair value.
