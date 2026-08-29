@@ -125,4 +125,27 @@ contract AuditTest is BaseTest {
         s.redeem(100e18, alice);
         assertEq(nvda.balanceOf(alice), 1_000e18, "every token back, no admin involved");
     }
+
+    /// @notice The two resolvers answer different questions and must be used for different things.
+    ///         `seriesFor` is authoritative once a series exists; `predictSeries` is only a
+    ///         prediction and legitimately moves when governance changes the registry.
+    function test_resolverSemantics() public {
+        // Before deployment the two agree, because there is nothing recorded yet.
+        _addExpiry(EXPIRY2);
+        address predicted = factory.predictSeries(address(nvda), 240e8, EXPIRY2);
+        assertEq(factory.seriesFor(address(nvda), 240e8, EXPIRY2), predicted);
+        assertEq(predicted.code.length, 0);
+
+        address created = factory.createSeries(address(nvda), 240e8, EXPIRY2);
+        assertEq(created, predicted, "the prediction was right");
+        assertEq(factory.deployedSeries(keccak256(abi.encode(address(nvda), uint256(240e8), EXPIRY2))), created);
+
+        // After a registry change the prediction moves. The record does not.
+        MockSequencerFeed seq2 = new MockSequencerFeed();
+        vm.prank(owner);
+        factory.setSequencerFeed(AggregatorV3Interface(address(seq2)));
+
+        assertTrue(factory.predictSeries(address(nvda), 240e8, EXPIRY2) != created, "prediction moved");
+        assertEq(factory.seriesFor(address(nvda), 240e8, EXPIRY2), created, "the record did not");
+    }
 }
