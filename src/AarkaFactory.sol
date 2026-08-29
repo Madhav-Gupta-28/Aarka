@@ -200,7 +200,12 @@ contract AarkaFactory is Ownable {
             underlying.staticcall(abi.encodeCall(IScaledUIAmountNewUIMultiplier.effectiveAt, ()));
         if (okAt && atData.length == 32) {
             uint256 effectiveAt = abi.decode(atData, (uint256));
-            if (effectiveAt != 0 && effectiveAt <= expiry) revert CorporateActionScheduled();
+            // Only a *pending* action matters. Robinhood leaves effectiveAt set to the timestamp
+            // of the last applied action rather than clearing it -- AAPL carries 1786720366 from
+            // a dividend already reinvested. Testing `!= 0` alone would reject every future series
+            // on any asset that has ever paid one. An action already applied is history, and by
+            // the argument in ARCHITECTURE.md section 4 it left the token price continuous anyway.
+            if (effectiveAt > block.timestamp && effectiveAt <= expiry) revert CorporateActionScheduled();
         }
     }
 

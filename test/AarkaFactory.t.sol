@@ -122,6 +122,15 @@ contract AarkaFactoryTest is BaseTest {
         factory.createSeries(address(nvda), 240e8, EXPIRY2); // fine
     }
 
+    /// @notice Regression. Robinhood does not clear effectiveAt after an action is applied:
+    ///         AAPL carries 1786720366 on mainnet from a dividend already reinvested. Gating on
+    ///         `effectiveAt != 0` would have made every AAPL series impossible to create.
+    function test_pastCorporateActionDoesNotBlockCreation() public {
+        _addExpiry(EXPIRY2);
+        nvda.scheduleCorporateAction(1000566080061092436, NOW - 30 days); // already applied
+        factory.createSeries(address(nvda), 240e8, EXPIRY2);
+    }
+
     function test_rejectsWhileTheOracleIsPaused() public {
         _addExpiry(EXPIRY2);
         nvda.setOraclePaused(true);
