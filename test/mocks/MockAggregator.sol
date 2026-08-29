@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity ^0.8.26;
 
 /// @notice A Chainlink aggregator with a writable round history, including the ability to make a
 ///         round id revert so the phase-boundary path in AarkaSeries can be exercised.
