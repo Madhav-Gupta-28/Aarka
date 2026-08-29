@@ -59,3 +59,21 @@ contract FeeOnTransferToken is ERC20 {
         super._update(from, to, value);
     }
 }
+
+/// @notice Consumes the entire transfer, so `received` is zero. Proves mint refuses a deposit
+///         that did not actually arrive rather than minting halves against nothing.
+contract BlackHoleToken is ERC20 {
+    constructor(string memory n, string memory s_) ERC20(n, s_) {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function _update(address from, address to, uint256 value) internal override {
+        if (from != address(0) && to != address(0)) {
+            super._update(from, address(0xdead), value);
+            return;
+        }
+        super._update(from, to, value);
+    }
+}

@@ -8,6 +8,7 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 
 contract AarkaParityHookTest is HookBaseTest {
     /// @dev A swap large enough to break parity well past the threshold.
@@ -270,5 +271,45 @@ contract AarkaParityHookTest is HookBaseTest {
         hook.setParams(50, 1e18);
         assertEq(hook.minDeviationBps(), 50);
         assertEq(hook.maxArbSize(), 1e18);
+    }
+
+    // ---------------------------------------------------------------- solver edge cases
+
+    /// @notice The constructor assertion that protects the entire permission model. v4 reads a
+    ///         hook's permissions from its address, so a hook deployed to an unmined address would
+    ///         silently have the wrong permissions. Deploying plainly must fail loudly.
+    function test_deployingToAnUnminedAddressReverts() public {
+        vm.expectRevert(AarkaParityHook.InvalidHookAddress.selector);
+        new AarkaParityHook(
+            IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner
+        );
+    }
+
+    /// @notice A pool with no liquidity has no price to solve against, so the arb must decline
+    ///         rather than divide by zero.
+    function test_solverDeclinesWhenAPoolIsEmpty() public {
+        PoolKey memory empty = _key(address(f), address(usdg), IHooks(address(hook)));
+        empty.fee = 500; // a different, uninitialised pool
+        empty.tickSpacing = 10;
+        manager.initialize(empty, _sqrtPrice(empty, address(f), P_FLOOR));
+
+        AarkaParityHook fresh = _mineAndDeploy();
+        vm.startPrank(owner);
+        fresh.wire(underlyingKey, empty, upsideKey);
+        fresh.setParams(1, 100_000e18);
+        vm.stopPrank();
+        // No liquidity in `empty`, so any swap that reaches the hook must not revert the swap.
+        _buyFloor(10_000e6);
+        assertGt(f.balanceOf(trader), 0);
+    }
+
+    /// @notice Below the deviation threshold the hook must decline before doing any work at all.
+    function test_hookDeclinesWhenAlreadyAtParity() public {
+        vm.prank(owner);
+        hook.setParams(5000, 100_000e18); // threshold far above any real dislocation
+        uint256 before = f.balanceOf(trader);
+        _buyFloor(BIG_SWAP_QUOTE);
+        assertGt(f.balanceOf(trader), before, "swap fills; the hook simply does nothing");
+        assertGt(parityGapBps(), 100, "and the gap is left wide open");
     }
 }

@@ -7,6 +7,7 @@ import {AarkaToken} from "../src/AarkaToken.sol";
 import {AarkaFactory} from "../src/AarkaFactory.sol";
 import {AggregatorV3Interface} from "../src/interfaces/IExternal.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
+import {BlackHoleToken} from "./mocks/MockStockToken.sol";
 
 /// @notice Input guards and access control. Individually dull, collectively the difference
 ///         between a contract that fails safe and one that fails open.
@@ -162,5 +163,58 @@ contract GuardsTest is BaseTest {
         (uint256 fp, uint256 up) = series.payouts();
         assertEq(fp, ONE / 2);
         assertEq(up, ONE / 2);
+    }
+
+    // ---------------------------------------------------------------- late feed changes
+
+    /// @notice A Chainlink proxy can be repointed to a new aggregator after registration. Series
+    ///         creation re-checks decimals for exactly that reason: an 18-decimal price against an
+    ///         8-decimal strike would make min(S, K) == K at every conceivable price.
+    function test_createRejectsAFeedThatChangedDecimalsAfterRegistration() public {
+        uint64 later = uint64(EXPIRY + 7 days);
+        uint64[] memory d = new uint64[](1);
+        d[0] = later;
+        vm.prank(owner);
+        calendar.addExpiries(d);
+
+        feed.setDecimals(18); // registered as 8, now reports 18
+        vm.expectRevert(AarkaFactory.UnexpectedFeedDecimals.selector);
+        factory.createSeries(address(nvda), 240e8, later);
+    }
+
+    function test_createRejectsANonPositiveSpot() public {
+        uint64 later = uint64(EXPIRY + 7 days);
+        uint64[] memory d = new uint64[](1);
+        d[0] = later;
+        vm.prank(owner);
+        calendar.addExpiries(d);
+
+        feed.pushRound(999, -1, block.timestamp); // latest round is negative
+        vm.expectRevert(AarkaFactory.SpotUnavailable.selector);
+        factory.createSeries(address(nvda), 240e8, later);
+    }
+
+    /// @notice If nothing actually arrives, nothing is minted. The balance-delta accounting has to
+    ///         refuse rather than issue halves against a deposit that never landed.
+    function test_mintRefusesADepositThatNeverArrives() public {
+        BlackHoleToken hole = new BlackHoleToken("Hole", "HOLE");
+        MockAggregator hf = new MockAggregator();
+        hf.pushRound(1, 100e8, block.timestamp);
+
+        uint64 later = uint64(EXPIRY + 7 days);
+        uint64[] memory d = new uint64[](1);
+        d[0] = later;
+        vm.startPrank(owner);
+        calendar.addExpiries(d);
+        factory.registerAsset(address(hole), AggregatorV3Interface(address(hf)));
+        vm.stopPrank();
+
+        AarkaSeries s = AarkaSeries(factory.createSeries(address(hole), 100e8, later));
+        hole.mint(alice, 100e18);
+        vm.startPrank(alice);
+        hole.approve(address(s), type(uint256).max);
+        vm.expectRevert(AarkaSeries.ZeroAmount.selector);
+        s.mint(10e18, alice);
+        vm.stopPrank();
     }
 }
