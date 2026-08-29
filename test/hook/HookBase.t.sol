@@ -111,6 +111,16 @@ contract HookBaseTest is Test {
     /// @dev v4 reads hook permissions from the low 14 bits of the address, so the deployment
     ///      address has to be mined with CREATE2. Getting this wrong is the classic way a first
     ///      v4 hook fails, and the constructor asserts it rather than trusting the deploy script.
+    function _mineAndDeploy() internal returns (AarkaParityHook deployed) {
+        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner);
+        (, bytes32 salt) = HookMiner.find(address(this), flags, type(AarkaParityHook).creationCode, args);
+        deployed = new AarkaParityHook{salt: salt}(
+            IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner
+        );
+    }
+
     function _deployHook() private {
         uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
         bytes memory args =
@@ -136,17 +146,17 @@ contract HookBaseTest is Test {
 
         vm.startPrank(owner);
         hook.wire(underlyingKey, floorKey, upsideKey);
-        hook.setParams(30, 10e18);
+        hook.setParams(30, 200e18);
         vm.stopPrank();
     }
 
     function _seedLiquidity() private {
-        nvda.mint(lp, 200_000e18);
-        usdg.mint(lp, 200_000_000e6);
+        nvda.mint(lp, 2_000_000e18);
+        usdg.mint(lp, 500_000_000e6);
 
         vm.startPrank(lp);
         nvda.approve(address(series), type(uint256).max);
-        series.mint(100_000e18, lp);
+        series.mint(1_000_000e18, lp);
 
         nvda.approve(address(liquidityRouter), type(uint256).max);
         usdg.approve(address(liquidityRouter), type(uint256).max);
@@ -158,11 +168,11 @@ contract HookBaseTest is Test {
         _addLiquidity(upsideKey);
         vm.stopPrank();
 
-        nvda.mint(trader, 50_000e18);
+        nvda.mint(trader, 500_000e18);
         usdg.mint(trader, 50_000_000e6);
         vm.startPrank(trader);
         nvda.approve(address(series), type(uint256).max);
-        series.mint(20_000e18, trader);
+        series.mint(200_000e18, trader);
         nvda.approve(address(swapRouter), type(uint256).max);
         usdg.approve(address(swapRouter), type(uint256).max);
         f.approve(address(swapRouter), type(uint256).max);
@@ -176,7 +186,7 @@ contract HookBaseTest is Test {
             IPoolManager.ModifyLiquidityParams({
                 tickLower: TickMath.minUsableTick(key.tickSpacing),
                 tickUpper: TickMath.maxUsableTick(key.tickSpacing),
-                liquidityDelta: 2_000_000e18,
+                liquidityDelta: 1e17,
                 salt: 0
             }),
             ""
