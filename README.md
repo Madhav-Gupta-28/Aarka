@@ -15,9 +15,36 @@ There is no borrowing anywhere in the design, so there is nothing to liquidate.
 
 Built on Robinhood Chain.
 
+## Contracts
+
+| Contract | Role |
+| --- | --- |
+| `AarkaFactory` | Creates series. Governs the underlying-to-feed registry, nothing else. |
+| `AarkaSeries` | One isolated vault per (underlying, strike, expiry). Holds the deposit, settles, pays claims. |
+| `AarkaToken` | The two halves. Minted and burned only by their series. |
+| `ExpiryCalendar` | Published, add-only list of valid expiry dates. |
+
+No proxies, no upgrades, no pause on user funds, no privileged withdrawal. Governance cannot move a
+token out of any series, and cannot touch a series that already exists.
+
+`redeem()` is never disabled, so if the oracle dies permanently nothing is stranded: hold both
+halves and withdraw.
+
+## Tests
+
+```
+forge test                                        # 82 tests
+forge test --match-path test/Fork.t.sol --fork-url robinhood   # against the live Chainlink feed
+forge coverage --no-match-coverage "test|script"
+```
+
+100% line and function coverage on `src/`. The invariant suite runs 512 sequences of 64 random
+calls each and asserts the vault can always cover every outstanding claim.
+
 ## Status
 
-In development.
+Core protocol complete and tested. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) section 15 for the
+items that must be resolved before mainnet.
 
 ## Docs
 
