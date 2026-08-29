@@ -27,6 +27,7 @@ Every on-chain fact in here was verified directly against a live RPC or a primar
 15. [Open items](#15-open-items)
 16. [Sources](#16-sources)
 - [Appendix A — Verified feed data](#appendix-a--verified-feed-data)
+- [Appendix B — Verified stock tokens](#appendix-b--verified-stock-tokens)
 
 ---
 
@@ -847,7 +848,33 @@ Installed on P2 and P3. On `afterSwap`:
 
 **Displacement risk.** By internalising the arbitrage the hook removes the incentive for external searchers to do it. If the hook is ever disabled or gas-starved, parity drifts *further* than it would have without it. Mitigation: `mint()` and `redeem()` remain permissionless and unchanged, so the manual arbitrage path is always available. The hook is an optimisation over that path, never a replacement for it.
 
-### 11.6 The side effect worth advertising
+### 11.6 What the implementation actually achieves
+
+Built and measured. `AarkaParityHook` is deployed to a `CREATE2` address mined so that its low 14
+bits equal `AFTER_SWAP_FLAG` (`0x40`), which the constructor asserts rather than trusting the
+deploy script.
+
+Against a control run with the hook disabled, on an identical set of pools and an identical swap:
+
+```
+                       gap without hook    gap with hook
+halves become dear          633 bps           468 bps      26% closed
+halves become cheap         633 bps           403 bps      36% closed
+```
+
+**The hook closes part of the gap, not all of it, and that is a real limitation rather than a
+tuning detail.** The arb executes at a fixed `maxArbSize` instead of the size that would exactly
+close the gap, because the optimal size is a function of all three pools' liquidity and solving
+for it on-chain is expensive. Sizing it properly — binary search, or a closed form against the
+three curves — is the obvious next improvement and would raise both figures substantially.
+
+Undersizing is safe in a way oversizing is not: a too-small arb leaves money on the table for the
+next swap to capture, while a too-large one is caught by the profitability check and reverts. The
+tests exercise both, including `maxArbSize` set to 5,000,000 tokens, where the arb's own slippage
+swamps the gap and the whole attempt reverts inside its `try/catch` without disturbing the user's
+swap.
+
+### 11.7 The side effect worth advertising
 
 Because the hook can route through mint and redeem, the three pools behave as **one liquidity surface**. A swapper going USDG to NVDA can be filled through the f and u pools when the direct pool is thin, and vice versa. The f and u pools become additional depth for the underlying rather than fragmenting it.
 
@@ -952,13 +979,13 @@ Everything below must be resolved before mainnet. Each is a blocking item, not a
 | --- | --- | --- | --- |
 | 1 | **Sequencer uptime feed address on Robinhood Chain** | [§7.3](#73-sequencer-uptime) guard cannot run without it | **STILL OPEN — and it is a documentation conflict, not a search failure.** Robinhood's docs tell integrators to use this feed; Chainlink's directory does not contain one. See [Appendix A.3](#a3-the-sequencer-uptime-feed-is-not-published). Raise with Robinhood Chain developer support |
 | 2 | ~~Chainlink feed proxy addresses per ticker~~ | — | **RESOLVED.** All 35 equity feeds in [Appendix A.1](#a1-equity-feed-proxy-addresses-chain-4663), from Chainlink's machine-readable directory |
-| 3 | **Stock token addresses, mainnet and testnet** | USDG's mainnet address has no code on testnet, so testnet addresses differ throughout | Robinhood Chain contracts page; verify each with `cast call ... "symbol()(string)"` |
-| 4 | **Whether feeds exist on testnet at all** | Chainlink documents these feeds as mainnet-only. If absent, testnet needs a mock aggregator | probe a known feed address on chain 46630 |
-| 5 | **`TransferWithUIAmount` vs `TransferWithScaledUI`** | ERC-8056 names the first; secondary sources report Robinhood emitting the second | read a real stock token's ABI from Blockscout. Cosmetic for the contracts, load-bearing for the subgraph |
-| 6 | **Exact `oraclePaused()` signature** | probed by `staticcall`, so a wrong selector silently disables the guard | read the deployed token ABI |
+| 3 | ~~Stock token addresses (mainnet)~~ | — | **RESOLVED.** 11 tokens verified on-chain, [Appendix B](#appendix-b--verified-stock-tokens). Testnet addresses remain unknown |
+| 4 | **Testnet has neither feeds nor stock tokens** | a testnet deployment needs mock aggregators and mock tokens | **CONFIRMED EMPTY.** The NVDA feed and the NVDA token both have zero bytecode on chain 46630. Uniswap v4's PoolManager *is* there, at the mainnet address, so Module 2 can still be demonstrated on testnet |
+| 5 | **`TransferWithUIAmount` vs `TransferWithScaledUI`** | cosmetic for the contracts, load-bearing for a subgraph | **STILL OPEN.** Neither topic hash appears in NVDA's recent logs, so this could not be settled by observation. Read the verified ABI from Blockscout |
+| 6 | ~~Exact `oraclePaused()` signature~~ | — | **RESOLVED.** `oraclePaused()` returns cleanly on all 11 tokens, so the selector is right and the probe is live rather than silently skipped |
 | 7 | **Feed round cadence during a quiet session** | validates `MAX_SETTLEMENT_LOOKBACK = 6 hours` empirically | **PARTIALLY RESOLVED.** Measured on NVDA over 111 rounds: worst intra-session gap 2.63 h, so 6 h holds with 2.3x headroom ([Appendix A.2](#a2-measured-round-cadence-nvda)). The sample week contained an earnings print, so re-run on a calm week and a low-volatility ticker before mainnet |
 | 8 | **NYSE calendar for the first year of expiries** | [§5.5](#55-expirycalendar) needs concrete timestamps, DST-correct | generate from the published NYSE holiday calendar; unit-test both DST transitions |
-| 9 | **v4-periphery `HookMiner` availability** | Module 2 cannot be deployed without a mined address | `forge install Uniswap/v4-periphery` |
+| 9 | ~~v4-periphery `HookMiner`~~ | — | **RESOLVED.** Available at `v4-periphery/test/shared/HookMiner.sol`. Note there is no `BaseHook` in this version, so the hook implements `IHooks` directly |
 
 ---
 
@@ -1090,3 +1117,75 @@ cast call 0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15 \
 **It is not in the directory.** `feeds-robinhood-mainnet.json` contains 57 feeds and none of them is a sequencer uptime feed. The same documentation names that directory as the source of truth and tells integrators never to hard-code addresses from anywhere else.
 
 So the two instructions are in conflict, and this is a gap in Robinhood's documentation rather than a gap in the search. Until it resolves, Aarka takes the address as a constructor argument, skips the check when it is zero, and **emits that fact in a deployment event** so the missing guard is visible on-chain instead of buried in a config file. Resolving this is [open item 1](#15-open-items) and it should be raised directly with Robinhood Chain developer support.
+
+---
+
+## Appendix B — Verified stock tokens
+
+Resolved 2026-08-29. Two independent sources agreed on these addresses, and every one was then
+verified on-chain by calling `symbol()` and `decimals()` — a published address is not evidence.
+
+All 11 are 18 decimals and all implement `uiMultiplier()`, `oraclePaused()` and `effectiveAt()`.
+
+| Ticker | Address | `uiMultiplier()` |
+| --- | --- | --- |
+| NVDA | `0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC` | `1e18` |
+| TSLA | `0x322F0929c4625eD5bAd873c95208D54E1c003b2d` | `1e18` |
+| AAPL | `0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9` | **`1000566080061092436`** |
+| MSFT | `0xe93237C50D904957Cf27E7B1133b510C669c2e74` | `1e18` |
+| AMZN | `0x12f190a9F9d7D37a250758b26824B97CE941bF54` | `1e18` |
+| GOOGL | `0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3` | `1e18` |
+| META | `0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35` | `1e18` |
+| MSTR | `0xec262a75e413fAfD0dF80480274532C79D42da09` | `1e18` |
+| COIN | `0x6330D8C3178a418788dF01a47479c0ce7CCF450b` | `1e18` |
+| SPY | `0x117cc2133c37B721F49dE2A7a74833232B3B4C0C` | `1e18` |
+| QQQ | `0xD5f3879160bc7c32ebb4dC785F8a4F505888de68` | `1e18` |
+
+`NVDA.name()` is `"NVIDIA • Robinhood Token"`, not `"NVIDIA"`. Total supply at the time of reading
+was 42,663 tokens, roughly $9.3M.
+
+### B.1 The bug real data caught
+
+**AAPL is the reason this appendix exists.** It is the only token in the set that has been through
+a corporate action, and its live state is:
+
+```
+uiMultiplier()  1000566080061092436     a dividend, reinvested: +0.0566%
+effectiveAt()   1786720366              a timestamp in the PAST
+```
+
+The factory's corporate-action guard was originally written as:
+
+```solidity
+if (effectiveAt != 0 && effectiveAt <= expiry) revert CorporateActionScheduled();
+```
+
+**Robinhood does not clear `effectiveAt` once an action has been applied.** It keeps the timestamp
+of the last one. So for AAPL the first clause is permanently true, and since any valid future
+expiry exceeds a past timestamp, the second is permanently true as well. That guard would have
+made it impossible to ever create an AAPL series — and impossible for every asset, the moment it
+paid its first dividend.
+
+The corrected guard:
+
+```solidity
+if (effectiveAt > block.timestamp && effectiveAt <= expiry) revert CorporateActionScheduled();
+```
+
+Only a *pending* action matters. An action already applied is history, and by the proof in
+[§4](#4-why-corporate-actions-do-not-require-strike-adjustment) it left the token price continuous
+anyway, so there is nothing for the guard to protect against.
+
+This is the single strongest argument for the fork tests. Every unit test passed against a mock
+that behaved the way the specification said it should. Only the live contract behaved the way it
+actually does. `test_appleWithAnAppliedDividendCanStillHaveASeries` now asserts the real state and
+creates the series that used to be impossible.
+
+### B.2 Testnet is empty
+
+Chain 46630 has **neither the feeds nor the stock tokens** — both the NVDA feed proxy and the NVDA
+token return zero bytecode there. A testnet deployment therefore needs mock aggregators and mock
+tokens for the core protocol.
+
+Uniswap v4's PoolManager *is* deployed on testnet, at the identical mainnet address, so
+[Module 2](#11-module-2--the-uniswap-v4-parity-hook) can still be demonstrated there end to end.
