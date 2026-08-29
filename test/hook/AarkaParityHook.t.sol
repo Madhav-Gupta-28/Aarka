@@ -181,4 +181,50 @@ contract AarkaParityHookTest is HookBaseTest {
         _sellFloor(300e18);
         return parityGapBps();
     }
+
+    // ---------------------------------------------------------------- unused entry points
+
+    /// @notice Every hook entry point the address does not enable must revert, not no-op.
+    /// @dev v4 derives permissions from the low 14 bits of the hook address. If a future deploy
+    ///      mis-mines the salt and enables an extra flag, v4 will call one of these. Reverting
+    ///      makes that fail loudly at the first swap instead of silently changing pool behaviour.
+    function test_unusedEntryPointsRevert() public {
+        IPoolManager.ModifyLiquidityParams memory mp =
+            IPoolManager.ModifyLiquidityParams({tickLower: 0, tickUpper: 60, liquidityDelta: 0, salt: 0});
+        IPoolManager.SwapParams memory sp =
+            IPoolManager.SwapParams({zeroForOne: true, amountSpecified: -1, sqrtPriceLimitX96: 0});
+        BalanceDelta zero = BalanceDelta.wrap(0);
+        bytes4 err = AarkaParityHook.HookNotImplemented.selector;
+
+        vm.expectRevert(err);
+        hook.beforeInitialize(address(this), floorKey, 0);
+        vm.expectRevert(err);
+        hook.afterInitialize(address(this), floorKey, 0, 0);
+        vm.expectRevert(err);
+        hook.beforeAddLiquidity(address(this), floorKey, mp, "");
+        vm.expectRevert(err);
+        hook.afterAddLiquidity(address(this), floorKey, mp, zero, zero, "");
+        vm.expectRevert(err);
+        hook.beforeRemoveLiquidity(address(this), floorKey, mp, "");
+        vm.expectRevert(err);
+        hook.afterRemoveLiquidity(address(this), floorKey, mp, zero, zero, "");
+        vm.expectRevert(err);
+        hook.beforeSwap(address(this), floorKey, sp, "");
+        vm.expectRevert(err);
+        hook.beforeDonate(address(this), floorKey, 0, 0, "");
+        vm.expectRevert(err);
+        hook.afterDonate(address(this), floorKey, 0, 0, "");
+    }
+
+    /// @notice setParams is the only tunable surface and it is owner-only.
+    function test_onlyOwnerCanSetParams() public {
+        vm.prank(trader);
+        vm.expectRevert();
+        hook.setParams(50, 1e18);
+
+        vm.prank(owner);
+        hook.setParams(50, 1e18);
+        assertEq(hook.minDeviationBps(), 50);
+        assertEq(hook.maxArbSize(), 1e18);
+    }
 }
