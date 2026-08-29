@@ -979,3 +979,113 @@ Primary sources only. Every claim in this document traces to one of these or to 
 ---
 
 *Last verified against live RPC endpoints on 2026-08-29.*
+
+---
+
+## Appendix A — Verified feed data
+
+Resolved on 2026-08-29 from Chainlink's machine-readable directory, which Robinhood's own documentation names as the source of truth:
+
+```
+https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json
+```
+
+57 feeds total on Robinhood Chain mainnet: **35 Robinhood tokenized equities** and 22 crypto/FX. Every equity feed shares identical parameters:
+
+| Parameter | Value | Consequence for Aarka |
+| --- | --- | --- |
+| `decimals` | **8** | matches the strike base; the [§7.6](#76-feed-decimals) assertion is correct for all 35 |
+| `heartbeat` | **86400 s (24 h)** | the heartbeat guarantees almost nothing. Freshness comes from the deviation threshold, not from the heartbeat, which is why [§7.5](#75-expiry-timing) had to be measured |
+| deviation threshold | **0.5 %** | the real update trigger |
+| `marketHours` | `us_equities_24/5` | **24 hours a day, 5 days a week** — not market hours only |
+
+The 24-hour heartbeat is the number to keep in mind. A naive integrator who writes `require(block.timestamp - updatedAt < heartbeat)` would accept a price up to a full day old and believe they had implemented a staleness check.
+
+### A.1 Equity feed proxy addresses (chain 4663)
+
+| Feed | Proxy |
+| --- | --- |
+| Robinhood AAPL / USD | `0x6B22A786bAa607d76728168703a39Ea9C99f2cD0` |
+| Robinhood AMD / USD | `0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72` |
+| Robinhood AMZN / USD | `0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C` |
+| Robinhood ASML / USD | `0xB4106147E8cce40b7d46124090d373A71b70f87D` |
+| Robinhood BABA / USD | `0x62Cc8F9b5f56a33c9C8A60c8B92779f523c4E984` |
+| Robinhood CLSK / USD | `0x810c12D3a554Bc47fd39597Fe3b3AAC4941F50eF` |
+| Robinhood COIN / USD | `0xA3a468A452940B7D6b69991207B508c609a98Ef2` |
+| Robinhood CRCL / USD | `0x6652eDf64bA3731C4F2D3ce821A0Fb1f1f6b482a` |
+| Robinhood CRWV / USD | `0xe1b3aABCAFAd1c94708dc1367dcfF8Aa4407487C` |
+| Robinhood DELL-USD | `0x1C6c8cADBe02E19129c39dDB92281cE4c0bf206b` |
+| Robinhood EWY / USD | `0xEFdf54610B62A7753Ec30bDc380847c12D32e1D1` |
+| Robinhood GME / USD | `0x27C71df6A64fB476468EdF256CF72c038baB5B67` |
+| Robinhood GOOGL / USD | `0xF6f373a037c30F0e5010d854385cA89185AE638b` |
+| Robinhood INTC / USD | `0x3f390C5C24628Ac7C489515402235FeAD71D1913` |
+| Robinhood IONQ / USD | `0x22EfeC4919baf55F360E0EDee4AbEB26DE4971eb` |
+| Robinhood META / USD | `0x7C38C00C30BEe9378381E7B6135d7283356D71b1` |
+| Robinhood MSFT / USD | `0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E` |
+| Robinhood MSTR / USD | `0x396118bdFB181e6240E74D243F266B061c0edc3D` |
+| Robinhood MU / USD | `0x425EEFdCf05ed6526C3cE61Af99429A228a6d596` |
+| Robinhood NBIS / USD | `0xE1D87B116Ba0fe898998f1D140339D1fA1E09705` |
+| Robinhood NVDA / USD | `0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15` |
+| Robinhood ORCL / USD | `0x0e6a64a2B58A6693a531E6c555f3A5d042eEA844` |
+| Robinhood PLTR / USD | `0x820ABedFF239034956B7A9d2F0a331f9F075eB4c` |
+| Robinhood QQQ / USD | `0x80901d846d5D7B030F26B480776EE3b29374C2ae` |
+| Robinhood RGTI / USD | `0x2A045cF1C49c61c166C036d2f06FA2D2d984f765` |
+| Robinhood RKLB / USD | `0x045477BF65Aef6f4F2386ad0164579e48381CC74` |
+| Robinhood SGOV-USD | `0xa0DF4ee0fFf975306345875E3548Fcc519577A11` |
+| Robinhood SLV / USD | `0x209b73908e92Ae021826eD79609845451Ecba2ce` |
+| Robinhood SNDK / USD | `0xfb133Fa4B7b385802B693a293606682Df47109A3` |
+| Robinhood SPCX / USD | `0xB265810950ba6c5C0Ff821c9963014a56fD8Bffb` |
+| Robinhood SPY / USD | `0x319724394D3A0e3669269846abE664Cd621f9f6A` |
+| Robinhood TSLA / USD | `0x4A1166a659A55625345e9515b32adECea5547C38` |
+| Robinhood TSM / USD | `0x874cF94aa8eC88Fd9560094dD065f2fB3E41Fc2F` |
+| Robinhood USAR-USD | `0xA994d3684e8400A6c8078226925779FdeE682DD9` |
+| Robinhood USO / USD | `0x75a9c76Ef439e2C7c2E5a34Ab105EcFe3766431c` |
+
+Also relevant:
+
+| Feed | Proxy |
+| --- | --- |
+| BTC / USD | `0xa2c5184bF03d373Dc9dE4876eb4Bce595B460251` |
+| ETH / USD | `0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9` |
+| USDG / USD | `0x61B7e5650328764B076A108EFF5fa7282a1B9aD2` |
+
+56 of the 57 feeds also expose a `secondaryProxyAddress` on a `-shared-svr` path (Chainlink Smart Value Recapture, aimed at OEV recovery for lending protocols). **Aarka uses the primary `proxyAddress`.** SVR feeds exist to redirect liquidation value in borrowing markets; Aarka has no liquidations, so the secondary is irrelevant to it and using it would add a dependency for no benefit.
+
+### A.2 Measured round cadence (NVDA)
+
+`RHNVDA / USD` at `0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15`, 111 consecutive rounds, aggregator round 820 to 930, covering 2026-08-24 through 2026-08-28.
+
+Round IDs on the proxy are the composite `(phaseId << 64) | aggregatorRoundId`. At the time of measurement `phaseId = 1` and the latest aggregator round was 930, i.e. roughly 930 rounds since the 1 July mainnet launch.
+
+```
+max intra-session gap (09:30-16:00 ET)     9,454 s   2.63 h
+median intra-session gap                   1,081 s   18 min
+max overnight gap (within the 24/5 window) 48,165 s  13.38 h
+tightest observed cadence                     29 s   (post-earnings, 26 Aug)
+```
+
+Three things this measurement establishes:
+
+1. **`MAX_SETTLEMENT_LOOKBACK = 6 h` is correct**, with 2.3x headroom over the worst observed intra-session gap and well under the overnight gaps that must be rejected.
+2. **The feed is live outside market hours.** Rounds 862–867 span 17:04–17:08 ET on 26 August, tracking NVDA's post-close earnings move from $212.71 to $219.43 at a 29-second cadence. This is what falsified the earlier "market hours only" claim in [§7.5](#75-expiry-timing).
+3. **Off-hours staleness is real and large.** Read live on Saturday 2026-08-29 12:28 UTC, `latestRoundData()` returned successfully with `updatedAt` **16.5 hours** in the past. Nothing reverted. This is [§7.1](#71-the-naive-read-is-wrong) demonstrated on mainnet rather than argued.
+
+Reproduce:
+
+```sh
+cast call 0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15 \
+  "latestRoundData()(uint80,int256,uint256,uint256,uint80)" \
+  --rpc-url https://rpc.mainnet.chain.robinhood.com
+```
+
+**Sample caveat, stated because it matters.** This is one ticker over five trading days, and that week contained an NVDA earnings print, which biases the sample towards *more* frequent updates than normal. A quiet week in a low-volatility name could show longer gaps. The measurement should be re-run across several tickers and a calm period before mainnet, and `MAX_SETTLEMENT_LOOKBACK` re-derived from the widest gap observed then.
+
+### A.3 The sequencer uptime feed is not published
+
+[§7.3](#73-sequencer-uptime) needs an L2 sequencer uptime feed, and Robinhood's documentation explicitly instructs integrators to use one:
+
+> "Because Robinhood Chain is a Layer-2, you should verify the sequencer is up before trusting a price — Chainlink provides an L2 Sequencer Uptime Feed for this."
+
+**It is not in the directory.** `feeds-robinhood-mainnet.json` contains 57 feeds and none of them is a sequencer uptime feed. The same documentation names that directory as the source of truth and tells integrators never to hard-code addresses from anywhere else.
+
+So the two instructions are in conflict, and this is a gap in Robinhood's documentation rather than a gap in the search. Until it resolves, Aarka takes the address as a constructor argument, skips the check when it is zero, and **emits that fact in a deployment event** so the missing guard is visible on-chain instead of buried in a config file. Resolving this is [open item 1](#15-open-items) and it should be raised directly with Robinhood Chain developer support.
