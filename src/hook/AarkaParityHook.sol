@@ -1,0 +1,394 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
+import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+import {AarkaSeries} from "../AarkaSeries.sol";
+
+/// @title AarkaParityHook
+/// @notice A Uniswap v4 hook that enforces `P(floor) + P(upside) == P(underlying)` by executing
+///         the mint/redeem arbitrage inside `afterSwap` and donating the profit to the LPs.
+///
+/// @dev Why this is not another LVR hook.
+///
+///      Every arbitrage-capture hook built so far targets arbitrage against an *external*
+///      reference price it can only estimate. It is guessing at fair value, so it recaptures a
+///      fraction and carries the risk of guessing wrong.
+///
+///      Aarka does not guess. The vault defines the relationship: mint and redeem are exactly
+///      1:1, unconditionally, at any price, with no fee. So the arbitrage is risk-free and
+///      internal — there is no fair-value estimate anywhere in the trade, only an identity the
+///      vault enforces by construction. That is a claim no hook arbitraging a CEX price can make.
+///
+///      Prior art, stated honestly: a v4 hook that detects and executes arbitrage inside
+///      afterSwap is not new. The novelty claimed here is the application — identity-enforced
+///      redemption arbitrage on a structured-product pair — not the pattern.
+///
+///      Three pools, all quoted in the same currency:
+///
+///          P1  underlying / quote     already liquid
+///          P2  floor      / quote     created by Aarka
+///          P3  upside     / quote     created by Aarka
+///
+///      sum too high  ->  buy underlying in P1, mint at the vault, sell both halves
+///      sum too low   ->  buy both halves, redeem at the vault, sell underlying in P1
+///
+///      All of it inside the PoolManager's existing lock, so flash accounting means the hook
+///      fronts no capital. It settles only the profit, and then donates that.
+contract AarkaParityHook is IHooks, Ownable {
+    using StateLibrary for IPoolManager;
+    using TransientStateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
+    using SafeERC20 for IERC20;
+
+    uint256 private constant Q96 = 1 << 96;
+    uint256 private constant BPS = 10_000;
+
+    /// @dev Transient reentrancy flag. The hook trades the very pools it is installed on, so its
+    ///      own swaps re-enter afterSwap. The flag makes that re-entry a no-op instead of an
+    ///      infinite recursion, which is what lets the arb touch all three pools.
+    bytes32 private constant REENTRANCY_SLOT = keccak256("aarka.parity.reentrancy");
+
+    IPoolManager public immutable poolManager;
+    AarkaSeries public immutable series;
+
+    Currency public immutable quote;
+    Currency public immutable underlyingCurrency;
+    Currency public immutable floorCurrency;
+    Currency public immutable upsideCurrency;
+
+    PoolKey public underlyingKey;
+    PoolKey public floorKey;
+    PoolKey public upsideKey;
+    bool public wired;
+
+    /// @notice Minimum mispricing before the hook does anything, in basis points.
+    /// @dev The gate that keeps ordinary swaps cheap. Below it, afterSwap costs three slot0 reads.
+    uint256 public minDeviationBps = 30;
+
+    /// @notice Hard cap on the size of a single arb, in units of the underlying.
+    /// @dev Bounds the hook's exposure on the AMM legs. The vault leg cannot lose — it is 1:1 by
+    ///      construction — so this cap plus revert-unless-profitable is what makes the hook
+    ///      impossible to induce into a losing trade.
+    uint256 public maxArbSize;
+
+    event Wired(PoolId underlyingPool, PoolId floorPool, PoolId upsidePool);
+    event ParityRestored(bool minted, uint256 size, uint256 profit);
+    event ParamsSet(uint256 minDeviationBps, uint256 maxArbSize);
+
+    error NotPoolManager();
+    error NotSelf();
+    error InvalidHookAddress();
+    error AlreadyWired();
+    error NotWired();
+    error PoolMismatch();
+    error BelowThreshold();
+    error NotProfitable();
+    error HookNotImplemented();
+
+    constructor(IPoolManager poolManager_, AarkaSeries series_, Currency quote_, address owner_)
+        Ownable(owner_)
+    {
+        // v4 reads a hook's permissions from the low 14 bits of its own address, so the deployment
+        // address must be mined with CREATE2 to match. This asserts the mining actually worked.
+        if (uint160(address(this)) & Hooks.ALL_HOOK_MASK != Hooks.AFTER_SWAP_FLAG) {
+            revert InvalidHookAddress();
+        }
+
+        poolManager = poolManager_;
+        series = series_;
+        quote = quote_;
+        underlyingCurrency = Currency.wrap(address(series_.underlying()));
+        floorCurrency = Currency.wrap(address(series_.floorToken()));
+        upsideCurrency = Currency.wrap(address(series_.upsideToken()));
+    }
+
+    // --------------------------------------------------------------------
+    // Wiring
+    // --------------------------------------------------------------------
+
+    /// @notice Bind the three pools. One-way: once wired, the keys can never change.
+    function wire(PoolKey calldata underlyingKey_, PoolKey calldata floorKey_, PoolKey calldata upsideKey_)
+        external
+        onlyOwner
+    {
+        if (wired) revert AlreadyWired();
+        _requirePair(underlyingKey_, underlyingCurrency);
+        _requirePair(floorKey_, floorCurrency);
+        _requirePair(upsideKey_, upsideCurrency);
+
+        underlyingKey = underlyingKey_;
+        floorKey = floorKey_;
+        upsideKey = upsideKey_;
+        wired = true;
+
+        emit Wired(underlyingKey_.toId(), floorKey_.toId(), upsideKey_.toId());
+    }
+
+    function setParams(uint256 minDeviationBps_, uint256 maxArbSize_) external onlyOwner {
+        minDeviationBps = minDeviationBps_;
+        maxArbSize = maxArbSize_;
+        emit ParamsSet(minDeviationBps_, maxArbSize_);
+    }
+
+    function _requirePair(PoolKey calldata key, Currency asset) private view {
+        bool ok = (key.currency0 == asset && key.currency1 == quote)
+            || (key.currency1 == asset && key.currency0 == quote);
+        if (!ok) revert PoolMismatch();
+    }
+
+    // --------------------------------------------------------------------
+    // The hook entry point
+    // --------------------------------------------------------------------
+
+    function afterSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
+        external
+        override
+        returns (bytes4, int128)
+    {
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
+
+        // Our own arb swaps land back here. Returning immediately is what turns recursion into
+        // a single pass, and it is why the arb is allowed to trade the pool it was triggered from.
+        if (_reentrant() || !wired || maxArbSize == 0) return (IHooks.afterSwap.selector, 0);
+
+        _setReentrant(true);
+        // Self-call so a failed or unprofitable arb reverts in its own frame. Transient storage
+        // and every currency delta unwind with it, leaving the user's swap untouched.
+        try this.restoreParity(key) {} catch {}
+        _setReentrant(false);
+
+        return (IHooks.afterSwap.selector, 0);
+    }
+
+    // --------------------------------------------------------------------
+    // The arbitrage
+    // --------------------------------------------------------------------
+
+    /// @notice External only so `afterSwap` can wrap it in try/catch. Callable by nobody else.
+    function restoreParity(PoolKey calldata triggerKey) external {
+        if (msg.sender != address(this)) revert NotSelf();
+
+        uint256 pUnder = _priceX96(underlyingKey, underlyingCurrency);
+        uint256 pFloor = _priceX96(floorKey, floorCurrency);
+        uint256 pUpside = _priceX96(upsideKey, upsideCurrency);
+
+        // All three assets are 18 decimals against the same quote, so the decimal scaling is
+        // identical across the three prices and cancels. Raw X96 prices compare directly.
+        uint256 sum = pFloor + pUpside;
+        bool halvesOverpriced = sum > pUnder;
+        uint256 gap = halvesOverpriced ? sum - pUnder : pUnder - sum;
+        if (FullMath.mulDiv(gap, BPS, pUnder) < minDeviationBps) revert BelowThreshold();
+
+        uint256 size = maxArbSize;
+        if (halvesOverpriced) _mintArb(size);
+        else _redeemArb(size);
+
+        uint256 profit = _profit();
+        _donate(triggerKey, profit);
+        emit ParityRestored(halvesOverpriced, size, profit);
+    }
+
+    /// @dev Halves are dear: buy the underlying, split it, sell both halves.
+    function _mintArb(uint256 size) private {
+        _swapExactOut(underlyingKey, underlyingCurrency, size);
+        poolManager.take(underlyingCurrency, address(this), size);
+
+        IERC20(Currency.unwrap(underlyingCurrency)).forceApprove(address(series), size);
+        series.mint(size, address(this));
+
+        _swapExactIn(floorKey, floorCurrency, size);
+        _settleDebt(floorCurrency);
+        _swapExactIn(upsideKey, upsideCurrency, size);
+        _settleDebt(upsideCurrency);
+
+        _settleDebtIfAny(underlyingCurrency);
+    }
+
+    /// @dev Halves are cheap: buy both, recombine them, sell the underlying.
+    function _redeemArb(uint256 size) private {
+        _swapExactOut(floorKey, floorCurrency, size);
+        poolManager.take(floorCurrency, address(this), size);
+        _swapExactOut(upsideKey, upsideCurrency, size);
+        poolManager.take(upsideCurrency, address(this), size);
+
+        series.redeem(size, address(this));
+
+        _swapExactIn(underlyingKey, underlyingCurrency, size);
+        _settleDebt(underlyingCurrency);
+    }
+
+    /// @dev The whole safety argument in one function. The vault leg is 1:1 and cannot lose, so
+    ///      the only exposure is AMM slippage. Requiring a strictly positive quote balance at the
+    ///      end means a manipulated pool cannot induce a losing trade — it can only make the arb
+    ///      revert, which costs the hook nothing and leaves the user's swap alone.
+    function _profit() private view returns (uint256) {
+        int256 delta = poolManager.currencyDelta(address(this), quote);
+        if (delta <= 0) revert NotProfitable();
+        return uint256(delta);
+    }
+
+    /// @dev Pays the captured arbitrage to the in-range LPs of the pool that triggered it.
+    function _donate(PoolKey calldata key, uint256 profit) private {
+        if (key.currency0 == quote) poolManager.donate(key, profit, 0, "");
+        else poolManager.donate(key, 0, profit, "");
+    }
+
+    // --------------------------------------------------------------------
+    // v4 plumbing
+    // --------------------------------------------------------------------
+
+    function _swapExactOut(PoolKey memory key, Currency asset, uint256 amountOut) private {
+        bool assetIsZero = key.currency0 == asset;
+        bool zeroForOne = !assetIsZero; // pay quote, receive asset
+        poolManager.swap(
+            key,
+            IPoolManager.SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: int256(amountOut),
+                sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            }),
+            ""
+        );
+    }
+
+    function _swapExactIn(PoolKey memory key, Currency asset, uint256 amountIn) private {
+        bool assetIsZero = key.currency0 == asset;
+        bool zeroForOne = assetIsZero; // pay asset, receive quote
+        poolManager.swap(
+            key,
+            IPoolManager.SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: -int256(amountIn),
+                sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            }),
+            ""
+        );
+    }
+
+    function _settleDebt(Currency c) private {
+        int256 d = poolManager.currencyDelta(address(this), c);
+        uint256 owed = uint256(-d);
+        poolManager.sync(c);
+        IERC20(Currency.unwrap(c)).safeTransfer(address(poolManager), owed);
+        poolManager.settle();
+    }
+
+    function _settleDebtIfAny(Currency c) private {
+        if (poolManager.currencyDelta(address(this), c) < 0) _settleDebt(c);
+    }
+
+    function _priceX96(PoolKey memory key, Currency asset) private view returns (uint256) {
+        (uint160 sqrtP,,,) = poolManager.getSlot0(key.toId());
+        uint256 p = FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), Q96);
+        if (key.currency0 == asset) return p;
+        return FullMath.mulDiv(Q96, Q96, p);
+    }
+
+    function _reentrant() private view returns (bool r) {
+        bytes32 slot = REENTRANCY_SLOT;
+        assembly ("memory-safe") {
+            r := tload(slot)
+        }
+    }
+
+    function _setReentrant(bool v) private {
+        bytes32 slot = REENTRANCY_SLOT;
+        assembly ("memory-safe") {
+            tstore(slot, v)
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // Unused IHooks entry points
+    // --------------------------------------------------------------------
+    // v4 derives permissions from the hook's address, so with only AFTER_SWAP_FLAG set these are
+    // never called. They revert rather than returning a selector so a mis-mined address fails
+    // loudly at the first swap instead of silently doing nothing.
+
+    function beforeInitialize(address, PoolKey calldata, uint160) external pure returns (bytes4) {
+        revert HookNotImplemented();
+    }
+
+    function afterInitialize(address, PoolKey calldata, uint160, int24) external pure returns (bytes4) {
+        revert HookNotImplemented();
+    }
+
+    function beforeAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        revert HookNotImplemented();
+    }
+
+    function afterAddLiquidity(
+        address,
+        PoolKey calldata,
+        IPoolManager.ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external pure returns (bytes4, BalanceDelta) {
+        revert HookNotImplemented();
+    }
+
+    function beforeRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        revert HookNotImplemented();
+    }
+
+    function afterRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        IPoolManager.ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) external pure returns (bytes4, BalanceDelta) {
+        revert HookNotImplemented();
+    }
+
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
+        external
+        pure
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        revert HookNotImplemented();
+    }
+
+    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        revert HookNotImplemented();
+    }
+
+    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        revert HookNotImplemented();
+    }
+}
