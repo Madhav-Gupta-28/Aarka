@@ -415,7 +415,7 @@ interface IExpiryCalendar {
 }
 ```
 
-An expiry must land on a US equity market close, because that is the only moment the Chainlink feed is guaranteed to be fresh ([§7.5](#75-expiry-timing)). The market close cannot be computed on-chain: it depends on the NYSE holiday calendar, on early-close days, and on US daylight saving transitions, which move 4:00 PM ET between 20:00 and 21:00 UTC.
+An expiry must avoid weekends and market holidays, when the feed stops publishing entirely ([§7.5](#75-expiry-timing)), and by convention lands on the 16:00 ET close. Neither condition can be computed on-chain: both depend on the NYSE holiday calendar, on early-close days, and on US daylight saving transitions, which move 16:00 ET between 20:00 and 21:00 UTC.
 
 Hard-coding a UTC cadence would silently drift by an hour twice a year and would settle on Thanksgiving. Publishing the calendar is the honest solution and it is what exchanges themselves do.
 
@@ -568,7 +568,13 @@ At **settlement** the series requires `!oraclePaused()` again.
 
 ### 7.5 Expiry timing, and why the lookback bound is the real pause detector
 
-Expiries are restricted to US equity market closes ([§5.5](#55-expirycalendar)) for one reason: that is the only moment the feed is reliably fresh. Outside market hours the feed holds its last value and a settlement would be reading a price from an arbitrary time in the past.
+**A correction to an earlier draft of this document.** It previously claimed expiries must fall at a US market close "because that is the only moment the feed is reliably fresh." Measurement showed that is false, and the real behaviour is better. `us_equities_24/5` means the feed publishes **around the clock, five days a week** — not during market hours only. Rounds 862–867 in [Appendix A.2](#a2-measured-round-cadence-nvda) land between 17:04 and 17:08 ET, after the close, tracking an after-hours earnings move of $212.71 to $219.43 in four minutes. Rounds 880–889 land between 02:12 and 08:54 ET. The feed only goes dark at the weekend.
+
+So the freshness constraint is narrower than stated: **do not expire on a weekend or a market holiday.** Within the 24/5 window the feed is live.
+
+Expiries are nonetheless still pinned to the 16:00 ET close, for two reasons that are honest about what they are — convention, not necessity. It is the price every quote screen, every options chain and every user already means by "the closing price," and it is the moment of deepest liquidity in the underlying. Neither is a safety property.
+
+One consequence worth stating: a series expiring at 16:00 ET on an earnings day settles on the **pre**-announcement price, and the after-hours move accrues entirely to whoever holds the tokens afterwards. That is correct and intended, but it must be visible in the interface, because a user who expects an earnings print to be inside their series will otherwise be surprised by their own position.
 
 The settlement round must then satisfy:
 
@@ -577,7 +583,17 @@ require(updatedAt <= expiry, "round is after expiry");
 require(expiry - updatedAt <= MAX_SETTLEMENT_LOOKBACK, "round too far before expiry");
 ```
 
-`MAX_SETTLEMENT_LOOKBACK` is **6 hours**. The reasoning is specific rather than arbitrary: a regular US session runs 09:30 to 16:00 ET, which is six and a half hours. A six-hour bound therefore guarantees the settlement round was published **during the same trading session** as the close it settles against, while still tolerating a quiet stock whose deviation-threshold feed did not update for several hours.
+`MAX_SETTLEMENT_LOOKBACK` is **6 hours**, and the value is now empirical rather than assumed. A regular US session runs 09:30 to 16:00 ET, so a six-hour bound guarantees the settlement round was published **during the same trading session** as the close it settles against.
+
+Measured against 111 consecutive live rounds of the NVDA feed ([Appendix A.2](#a2-measured-round-cadence-nvda)):
+
+```
+largest observed intra-session gap    9,454 s   =  2.63 h
+median  intra-session gap             1,081 s   = 18 min
+largest observed overnight gap       48,165 s   = 13.38 h
+```
+
+Six hours clears the worst observed intra-session gap by **2.3x** while sitting comfortably below the 13.4-hour overnight gaps that must be rejected. The bound is neither tight enough to fail on a quiet afternoon nor loose enough to accept a price from the previous session.
 
 This single bound does more work than it appears to, and it is worth being explicit about why:
 
