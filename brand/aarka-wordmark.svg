@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 120" width="440" height="120" role="img" aria-label="Aarka">
+  <title>Aarka</title>
+  <defs>
+    <clipPath id="upside"><rect x="0" y="0"  width="120" height="45"/></clipPath>
+    <clipPath id="floor" ><rect x="0" y="55" width="120" height="65"/></clipPath>
+  </defs>
+  <circle cx="60" cy="60" r="35" fill="#F2A33C" clip-path="url(#upside)"/>
+  <circle cx="60" cy="60" r="35" fill="#F2A33C" clip-path="url(#floor)"/>
+  <text x="126" y="79" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="60" font-weight="600" letter-spacing="-1.5" fill="#0E1116">aarka</text>
+</svg>

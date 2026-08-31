@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Aarka">
+  <title>Aarka</title>
+  <desc>One share, split at the strike: the floor below, the upside above.</desc>
+  <defs>
+    <clipPath id="upside"><rect x="0" y="0"  width="120" height="45"/></clipPath>
+    <clipPath id="floor" ><rect x="0" y="55" width="120" height="65"/></clipPath>
+  </defs>
+  <circle cx="60" cy="60" r="35" fill="#F7F4ED" clip-path="url(#upside)"/>
+  <circle cx="60" cy="60" r="35" fill="#F7F4ED" clip-path="url(#floor)"/>
+</svg>
