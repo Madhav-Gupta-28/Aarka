@@ -14,9 +14,13 @@ def seg_dist(px, py, x1, y1, x2, y2):
     return hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 
 def mark_hit(x, y):
-    """The mark in its native 120x120 space."""
-    if hypot(x - 37.5, y - 81.5) <= 28.0: return True        # the floor: solid, it has value
-    if abs(hypot(x - 81.5, y - 39.5) - 24.0) <= 5.0: return True  # the upside: open, may be empty
+    """The mark in its native 120x120 space.
+
+    A solid disc and an open ring, joined and rising. The floor always has value, so it is solid.
+    The upside can be worth nothing, so it is a hole. They overlap rather than float apart, which
+    is what keeps the mark one object at 28px instead of three details that collapse separately."""
+    if hypot(x - 40.0, y - 80.0) <= 30.0: return True              # the floor
+    if abs(hypot(x - 79.0, y - 41.0) - 26.0) <= 5.5: return True   # the upside
     return False
 
 def payoff_hit(x, y, w, h):

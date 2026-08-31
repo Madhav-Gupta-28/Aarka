@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 120" width="430" height="120" role="img" aria-label="Aarka">
   <title>Aarka</title>
-  <circle cx="37.5" cy="81.5" r="28" fill="#F2A33C"/>
-  <circle cx="81.5" cy="39.5" r="24" fill="none" stroke="#F2A33C" stroke-width="10"/>
+  <circle cx="40" cy="80" r="30" fill="#F2A33C"/>
+  <circle cx="79" cy="41" r="26" fill="none" stroke="#F2A33C" stroke-width="11"/>
   <text x="128" y="79" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
         font-size="60" font-weight="600" letter-spacing="-1.5" fill="#0E1116">aarka</text>
 </svg>

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="400" height="400" role="img" aria-label="Aarka">
   <title>Aarka</title>
   <rect width="120" height="120" fill="#0E1116"/>
-  <g transform="translate(60,60) scale(0.86) translate(-60,-60)">
-    <circle cx="37.5" cy="81.5" r="28" fill="#F2A33C"/>
-    <circle cx="81.5" cy="39.5" r="24" fill="none" stroke="#F2A33C" stroke-width="10"/>
+  <g transform="translate(60,60) scale(0.82) translate(-60,-60)">
+    <circle cx="40" cy="80" r="30" fill="#F2A33C"/>
+    <circle cx="79" cy="41" r="26" fill="none" stroke="#F2A33C" stroke-width="11"/>
   </g>
 </svg>
