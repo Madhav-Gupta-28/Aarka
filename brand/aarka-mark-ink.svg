@@ -1,10 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Aarka">
   <title>Aarka</title>
-  <desc>One share, split at the strike: the floor below, the upside above.</desc>
-  <defs>
-    <clipPath id="upside"><rect x="0" y="0"  width="120" height="45"/></clipPath>
-    <clipPath id="floor" ><rect x="0" y="55" width="120" height="65"/></clipPath>
-  </defs>
-  <circle cx="60" cy="60" r="35" fill="#0E1116" clip-path="url(#upside)"/>
-  <circle cx="60" cy="60" r="35" fill="#0E1116" clip-path="url(#floor)"/>
+  <desc>Two tokens from one share: the floor, solid and certain; the upside, open and possibly empty.</desc>
+  <circle cx="37.5" cy="81.5" r="28" fill="#0E1116"/>
+  <circle cx="81.5" cy="39.5" r="24" fill="none" stroke="#0E1116" stroke-width="10"/>
 </svg>

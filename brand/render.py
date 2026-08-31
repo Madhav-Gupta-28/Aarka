@@ -15,10 +15,8 @@ def seg_dist(px, py, x1, y1, x2, y2):
 
 def mark_hit(x, y):
     """The mark in its native 120x120 space."""
-    d = hypot(x - 60.0, y - 60.0)
-    if abs(d - 35.0) <= 3.5: return True          # the share, outlined
-    if d <= 35.0 and y >= 59.0: return True       # the floor, solid up to the strike
-    if seg_dist(x, y, 14.0, 52.0, 106.0, 52.0) <= 3.5: return True  # the strike
+    if hypot(x - 37.5, y - 81.5) <= 28.0: return True        # the floor: solid, it has value
+    if abs(hypot(x - 81.5, y - 39.5) - 24.0) <= 5.0: return True  # the upside: open, may be empty
     return False
 
 def payoff_hit(x, y, w, h):

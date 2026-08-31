@@ -2,16 +2,18 @@
 
 ## The mark
 
-A circle is one share. The gap through it is the strike.
+Two shapes. One solid, one open.
 
-Below the gap is solid: the **floor**, everything up to the strike. Above it, separated, is the
-**upside**. Two pieces that were one piece — which is the entire protocol in one shape.
+The **floor** is the solid disc. Whatever happens, it is worth something — it tracks the share all
+the way down. The **upside** is the open ring. Below the strike it is worth exactly nothing, and the
+hole in the middle is that. They sit on a rising diagonal.
 
-The split sits above centre on purpose. The floor holds most of the value in any series struck near
-spot, so it should look like it does.
+The first version of this mark was a circle cut evenly in half. It was wrong, and the reason is
+worth writing down: **the two tokens are not symmetric.** One is capped, the other is unbounded; one
+always has value, the other frequently has none. A shape that divides something evenly says
+"divided" and stops there. Two unequal shapes, one filled and one hollow, say which is which.
 
-The name is Sanskrit — **आर्क (ārka)**, sun, ray — and the mark reads as a sun on a horizon if you
-want it to. That is a bonus, not the brief.
+It is also not a coin, which most of the timeline is.
 
 ## Files
 
