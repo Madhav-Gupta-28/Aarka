@@ -3,7 +3,7 @@ import zlib, struct
 from math import hypot
 
 INK   = (0x0E, 0x11, 0x16, 255)
-AMBER = (0xF2, 0xA3, 0x3C, 255)
+AMBER = (0xD9, 0x92, 0x4A, 255)   # ochre
 CLEAR = (0, 0, 0, 0)
 SS = 4  # samples per axis
 
@@ -17,10 +17,14 @@ def mark_hit(x, y):
     """The mark in its native 120x120 space.
 
     A solid disc and an open ring, joined and rising. The floor always has value, so it is solid.
-    The upside can be worth nothing, so it is a hole. They overlap rather than float apart, which
-    is what keeps the mark one object at 28px instead of three details that collapse separately."""
-    if hypot(x - 40.0, y - 80.0) <= 30.0: return True              # the floor
-    if abs(hypot(x - 79.0, y - 41.0) - 26.0) <= 5.5: return True   # the upside
+    The upside can be worth nothing, so it is a hole.
+
+    The disc is r=28 rather than r=30 on purpose. A solid form carries far more optical weight than
+    a hollow one -- at r=30 it held 57% more ink than the ring and the pair read as lopsided. At
+    r=28 the two footprints are near enough equal, with the disc still fractionally the heavier of
+    the two, which is also true of the thing it stands for."""
+    if hypot(x - 41.2, y - 78.8) <= 28.0: return True             # the floor
+    if abs(hypot(x - 79.0, y - 41.0) - 26.0) <= 5.5: return True  # the upside
     return False
 
 def payoff_hit(x, y, w, h):

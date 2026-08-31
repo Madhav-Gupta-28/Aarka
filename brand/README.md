@@ -38,26 +38,32 @@ object with one internal detail, and it survives down to 28px.
 
 ## Which background
 
-Amber, with the mark in ink. It is the only pairing that survives every feed.
+Ochre mark on ink. Not ink on a filled ochre square.
 
-X has three themes and people use all of them. A **dark** avatar dissolves into a lights-out
-timeline and loses its edge; a **light** one vanishes against light mode. Amber is a mid-tone, so it
-holds contrast against black, against `#15202B`, and against white. That it is also the brand colour
-is a bonus, not the reason.
+An earlier draft had it the other way round, chosen because a mid-tone background keeps its edge
+against every X theme. That was optimising for the wrong thing. A filled colour block is a wall with
+no air in it, and the mark is meant to sit calmly rather than shout.
 
-Use `aarka-avatar-alt` (amber on ink) only on surfaces you control, where nothing is competing.
-On your own site, docs and README, use the transparent mark and let your background do the work.
+On a lights-out timeline the ink ground is so close to the feed that the circle's edge disappears
+and the mark simply floats on the page. That reads as deliberate, not broken, and it is the better
+outcome. On light mode the dark disc is strong. On dim it sits quietly between the two.
+
+`aarka-avatar-alt` puts the mark on paper instead, for light decks and print.
 
 ## Colour
 
 ```
 ink     #0E1116    backgrounds, the wordmark on light
-amber   #F2A33C    the mark
-paper   #F7F4ED    the wordmark on dark
+ochre   #D9924A    the mark
+paper   #F7F4ED    the wordmark on dark, light-ground avatars
 ```
 
-Amber rather than the usual crypto blue or purple: warm, legible against a dark UI, and distinct on
+Ochre rather than the usual crypto blue or purple: warm, legible against a dark UI, and distinct on
 a timeline where everything else is cold.
+
+It is deliberately deeper and less saturated than a bright orange. Bright orange reads as playful
+and slightly loud; this sits closer to earth pigment, which is warm without raising its voice. For a
+product whose subject is a floor under a position, that is the right register.
 
 ## Rules
 
@@ -66,6 +72,8 @@ a timeline where everything else is cold.
 - Never close the gap. The gap is the product.
 - The mark stays legible down to 28px; below that, use the solid disc alone.
 - Never separate the two forms. They overlap so the mark stays one object when it is small.
+- Do not resize one form without the other. The disc is r=28 against a ring of r=26/w=11 because a
+  solid shape outweighs a hollow one; changing either alone makes the pair lopsided again.
 
 ## Regenerating
 
