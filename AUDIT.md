@@ -29,6 +29,8 @@ Testnet stand-ins in `src/testnet/` are out of scope; they never touch mainnet.
 | 06 | Low | A future-dated sequencer round panicked on underflow instead of reverting cleanly | Fixed |
 | 07 | Low | `_settleDebt` cast a delta it only assumed was negative | Fixed |
 | 08 | Info | `AarkaLens` used raw `*` and `/` where settlement uses `Math.mulDiv` | Fixed |
+| 09 | **Medium** | Hook price inversion divided by a truncated intermediate: panicked below `sqrtP = 2^48` and returned 26% wrong prices above it | Fixed |
+| 11 | Info | `AarkaLens.allSeries()` is unbounded over an attacker-growable list | Documented |
 
 ---
 
@@ -133,6 +135,46 @@ Refusing costs only the payoff split. `redeem` stays open regardless, so nothing
 
 ---
 
+### AUDIT-09 · Medium · The hook mispriced cheap assets, then panicked on them
+
+Second pass. `_priceX96` inverted a price by forming `p = sqrtP² / 2⁹⁶` and then computing
+`2¹⁹² / p`. Both halves of that are wrong.
+
+`p` **truncates to zero** for any `sqrtP` below `2⁴⁸`, and `MIN_SQRT_PRICE` is about `2³²`, so a
+wide band of the legal range divides by zero. Just above the threshold `p` is a single-digit
+integer, so the inverse is quantised into enormous steps — measured **26.5% error** at
+`sqrtP = 548394833893341`.
+
+This is not a corner nobody visits. **A deep out-of-the-money upside token trades near zero by
+design**, which is exactly where the arithmetic falls apart. The consequences were a silently wrong
+parity gap, a mis-sized solve, and eventually a panic that the `try/catch` swallowed — so the hook
+would simply stop working, with no signal.
+
+**Fix.** Divide twice instead of squaring first, so the degenerate intermediate never forms:
+
+```solidity
+uint256 half = FullMath.mulDiv(Q96, Q96, sqrtP);
+return FullMath.mulDiv(half, Q96, sqrtP);
+```
+
+**Verification.** `testFuzz_safeFormNeverRevertsInRange` covers the full legal range at 10,000 runs.
+`testFuzz_theInverseIsActuallyTheInverse` asserts a price and its inverse multiply back to `2¹⁹²`
+to within a basis point. Hook behaviour is unchanged where it already worked — parity still closes
+to 0 bps.
+
+---
+
+### AUDIT-11 · Info · The unbounded lens read
+
+`allSeries()` loops the whole list at roughly **40k gas per series**, so it stops fitting a typical
+`eth_call` past a thousand or so. Creation is permissionless, so anyone can grow that list.
+
+Not a vulnerability: the lens is outside the protocol and holds nothing, `seriesPage` already exists
+and is unaffected, and no core function iterates the list. Documented in the contract so a front end
+does not reach for the wrong one.
+
+---
+
 ## What was checked and found sound
 
 **The conservation identity.** `floorPayoutPerUnit + upsidePayoutPerUnit == 1e18` holds by
@@ -159,6 +201,19 @@ call sites re-read and confirmed.
 set — `updatedAt <= expiry`, within the 6-hour lookback, and no later round at or before expiry —
 leaves essentially one valid round. The one gap is a Chainlink phase boundary, which is what the
 challenge window exists for, and that window is convergent, monotone and time-bounded.
+
+**`DateLib`.** Fuzzed across the entire `uint64` domain at 10,000 runs: never panics, always returns
+exactly seven bytes. The month index is provably within its 13-entry array because `mp <= 11` for
+any day-of-year. Separately checked that consecutive days advance by exactly one calendar day, which
+is what would catch an off-by-one in the era arithmetic that spot checks miss, and that no month
+ever yields an impossible day.
+
+**Rounding dust.** Three wei deposited, settled at an unclean ratio: two wei out on the floor leg,
+zero on the upside, one wei stranded in the vault, both supplies at zero. Dust accumulates and is
+never claimable twice.
+
+**Settlement is not a lever for the caller.** A hostile settler presented with a far better price
+published ten minutes after expiry is refused, and the only round that qualifies is the correct one.
 
 **Reentrancy.** `nonReentrant` on every state-changing entry point, checks-effects-interactions
 throughout, and balance-delta accounting on deposit so the supply invariant survives a token that

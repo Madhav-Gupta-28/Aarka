@@ -354,8 +354,7 @@ contract AarkaParityHook is IHooks, Ownable {
         uint160 next = buying
             ? SqrtPriceMath.getNextSqrtPriceFromOutput(leg.sqrtP, leg.liquidity, amount, zeroForOne)
             : SqrtPriceMath.getNextSqrtPriceFromInput(leg.sqrtP, leg.liquidity, amount, zeroForOne);
-        uint256 p = FullMath.mulDiv(uint256(next), uint256(next), Q96);
-        return leg.assetIsZero ? p : FullMath.mulDiv(Q96, Q96, p);
+        return _toPriceX96(next, leg.assetIsZero);
     }
 
     /// @dev Half the asset a full-range position holds. Half rather than all, because the price
@@ -426,9 +425,27 @@ contract AarkaParityHook is IHooks, Ownable {
 
     function _priceX96(PoolKey memory key, Currency asset) private view returns (uint256) {
         (uint160 sqrtP,,,) = poolManager.getSlot0(key.toId());
-        uint256 p = FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), Q96);
-        if (key.currency0 == asset) return p;
-        return FullMath.mulDiv(Q96, Q96, p);
+        return _toPriceX96(sqrtP, key.currency0 == asset);
+    }
+
+    /// @dev The asset's price in quote terms, X96.
+    ///
+    ///      When the asset is currency1 the price has to be inverted, and the obvious way to do
+    ///      that — form `p = sqrtP^2 / 2^96` and then compute `2^192 / p` — is wrong twice over.
+    ///      `p` truncates to **zero** for any `sqrtP` below `2^48`, which is well inside the legal
+    ///      range and panics on the division; and just above that threshold `p` is a single-digit
+    ///      integer, so the inverse is quantised into enormous steps. Measured error at
+    ///      `sqrtP = 5.48e14` was 21%.
+    ///
+    ///      A cheap asset is not a hypothetical here: a deep out-of-the-money upside token trades
+    ///      near zero by design, which is precisely where the naive form breaks.
+    ///
+    ///      Dividing twice instead of squaring first keeps full precision and never forms the
+    ///      degenerate intermediate. Both steps stay inside uint256 across the whole legal range.
+    function _toPriceX96(uint160 sqrtP, bool assetIsZero) private pure returns (uint256) {
+        if (assetIsZero) return FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), Q96);
+        uint256 half = FullMath.mulDiv(Q96, Q96, uint256(sqrtP));
+        return FullMath.mulDiv(half, Q96, uint256(sqrtP));
     }
 
     function _reentrant() private view returns (bool r) {

@@ -84,6 +84,10 @@ contract AarkaLens {
     }
 
     /// @notice Every series the factory has created.
+    /// @dev Measured at roughly 40k gas per series, so this stops fitting a typical `eth_call`
+    ///      somewhere past a thousand of them. Series creation is permissionless, so that list is
+    ///      growable by anyone. Front ends should use `seriesPage` and treat this as a convenience
+    ///      for small deployments.
     function allSeries() external view returns (SeriesView[] memory out) {
         uint256 n = factory.seriesCount();
         out = new SeriesView[](n);
