@@ -25,7 +25,8 @@ object with one internal detail, and it survives down to 28px.
 
 | File | Use |
 | --- | --- |
-| `aarka-avatar-400.png` · `aarka-avatar-1000.png` | profile picture, ink background |
+| `aarka-avatar-400.png` · `aarka-avatar-1000.png` | profile picture: ink mark on amber |
+| `aarka-avatar-alt-400.png` | amber on ink, for surfaces you control |
 | `aarka-banner-1500x500.png` | X / Twitter header |
 | `aarka-mark-512.png` | mark on transparent, amber |
 | `aarka-favicon-64.png` | favicon |
@@ -34,6 +35,18 @@ object with one internal detail, and it survives down to 28px.
 | `aarka-wordmark.svg` · `-light` | mark plus wordmark |
 | `aarka-avatar.svg` | vector source for the avatar |
 | `render.py` | the rasteriser; regenerates every PNG from scratch |
+
+## Which background
+
+Amber, with the mark in ink. It is the only pairing that survives every feed.
+
+X has three themes and people use all of them. A **dark** avatar dissolves into a lights-out
+timeline and loses its edge; a **light** one vanishes against light mode. Amber is a mid-tone, so it
+holds contrast against black, against `#15202B`, and against white. That it is also the brand colour
+is a bonus, not the reason.
+
+Use `aarka-avatar-alt` (amber on ink) only on surfaces you control, where nothing is competing.
+On your own site, docs and README, use the transparent mark and let your background do the work.
 
 ## Colour
 
