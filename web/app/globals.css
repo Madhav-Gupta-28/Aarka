@@ -167,3 +167,66 @@ header {
 
 .two { display: grid; gap: 16px; grid-template-columns: 1.15fr 1fr; align-items: start; }
 @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+
+/* ---------- settle ---------- */
+.settleBox { border: 1px solid var(--ochre-dim); border-radius: 12px; background: var(--ink-2);
+             padding: 18px; margin-top: 16px; }
+.settleBox b { font-size: 13px; font-weight: 600; color: var(--ochre); }
+.settleBox p { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 9px; }
+.panelTitle { font-size: 14px; font-weight: 600; display: block; }
+.lockNote { font-size: 12px; color: var(--muted); line-height: 1.6; border-left: 2px solid var(--ochre-dim);
+            padding: 9px 12px; margin: 4px 0 14px; background: rgba(217,146,74,.05); }
+
+.claimRow { display: flex; align-items: center; gap: 14px; padding: 12px 0;
+            border-top: 1px solid var(--line); }
+.claimRow > div { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.claimRow span { font-size: 11px; color: var(--muted);
+                 font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.claimRow b { font-size: 17px; font-weight: 500;
+              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.claimRow em { font-size: 11px; color: var(--ochre); font-style: normal; }
+
+/* ---------- parity ---------- */
+.parity { border-top: 1px solid var(--line); margin-top: 48px; padding-top: 34px; }
+.ledger { border: 1px solid var(--line); border-radius: 12px; background: var(--ink-2);
+          padding: 6px 18px; margin: 16px 0; }
+.lrow { display: flex; justify-content: space-between; padding: 10px 0; font-size: 13px; }
+.lrow + .lrow { border-top: 1px solid var(--line); }
+.lrow span { color: var(--muted); }
+.lrow b { font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lrow.sum b { color: var(--ochre); }
+.lrow.gap.ok b { color: var(--green); }
+.lrow.gap.off b { color: var(--ochre); }
+.parityBtns { display: flex; gap: 10px; flex-wrap: wrap; }
+.parityBtns .btn { flex: 1; min-width: 190px; }
+
+/* ---------- positions ---------- */
+.posTable { display: flex; flex-direction: column; gap: 10px; }
+.posRow { border: 1px solid var(--line); border-radius: 12px; background: var(--ink-2); padding: 15px 18px; }
+.posHead { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.posHead b { font-size: 14px; }
+.posCells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.posCells > div { display: flex; flex-direction: column; gap: 1px; }
+.posCells span { font-size: 11px; color: var(--muted); }
+.posCells b { font-size: 15px; font-weight: 500;
+              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.posCells em { font-size: 11px; color: var(--ochre); font-style: normal; }
+@media (max-width: 620px) { .posCells { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- indicative ---------- */
+.indicative { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 16px; }
+.indHead { display: flex; align-items: center; gap: 10px; }
+.indHead b { font-size: 13px; font-weight: 600; }
+.tagModel { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+            border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+.indBars { margin: 14px 0 12px; }
+.bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--ink); }
+.fill { height: 100%; }
+.floorFill { background: var(--ochre); }
+.upsideFill { background: var(--paper); }
+.indLegend { display: flex; gap: 18px; margin-top: 9px; font-size: 12px; color: var(--muted); }
+.indLegend span { display: flex; align-items: center; gap: 6px; }
+.indLegend i { width: 14px; height: 2.5px; border-radius: 2px; display: inline-block; }
+.volRow { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.volRow input { flex: 1; accent-color: var(--ochre); }
+.volRow b { color: var(--paper); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

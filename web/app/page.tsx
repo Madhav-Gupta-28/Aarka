@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {publicClient} from "@/lib/client";
 import {ADDRESSES, LENS_ABI} from "@/lib/contracts";
 import {robinhoodTestnet} from "@/lib/chain";
@@ -9,36 +9,38 @@ import {SeriesCard, type SeriesView} from "@/components/SeriesCard";
 import {Mark} from "@/components/Mark";
 import {Connect} from "@/components/Connect";
 import {Split} from "@/components/Split";
+import {Claim} from "@/components/Claim";
+import {Settle} from "@/components/Settle";
 import {Faucet} from "@/components/Faucet";
+import {Positions} from "@/components/Positions";
+import {Indicative} from "@/components/Indicative";
+import {ParityPanel} from "@/components/ParityPanel";
 
 export default function Home() {
   const [series, setSeries] = useState<SeriesView[] | null>(null);
   const [active, setActive] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const rows = (await publicClient.readContract({
-          address: ADDRESSES.lens as `0x${string}`,
-          abi: LENS_ABI,
-          functionName: "allSeries",
-        })) as unknown as SeriesView[];
-        if (alive) setSeries([...rows]);
-      } catch (e) {
-        if (alive) setErr(e instanceof Error ? e.message : "could not reach the chain");
-      }
+  const load = useCallback(async () => {
+    try {
+      const rows = (await publicClient.readContract({
+        address: ADDRESSES.lens as `0x${string}`, abi: LENS_ABI, functionName: "allSeries",
+      })) as unknown as SeriesView[];
+      setSeries([...rows]);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "could not reach the chain");
     }
-    load();
-    const t = setInterval(load, 15_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
   }, []);
 
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
   const s = series?.[active];
+  const expired = s ? s.status !== 0 : false;
 
   return (
     <div className="wrap">
@@ -65,11 +67,10 @@ export default function Home() {
       {s && (
         <>
           <div className="sectionHead">
-            <h2>
-              {s.underlyingSymbol} at ${(Number(s.strike) / 1e8).toFixed(0)}
-            </h2>
+            <h2>{s.underlyingSymbol} at ${(Number(s.strike) / 1e8).toFixed(0)}</h2>
             <span>what each half is worth at expiry — hover to read any price</span>
           </div>
+
           <div className="two">
             <div>
               <PayoffChart
@@ -78,16 +79,21 @@ export default function Home() {
                 settlementPrice={s.settled ? s.settlementPrice : undefined}
                 underlyingSymbol={s.underlyingSymbol}
               />
+              <Indicative s={s} />
               <Faucet symbol={s.underlyingSymbol} />
             </div>
-            <Split s={s} />
+
+            <div>
+              {s.settled ? <Claim s={s} /> : <Split s={s} />}
+              {expired && !s.settled && <Settle s={s} onDone={load} />}
+            </div>
           </div>
         </>
       )}
 
       <div className="sectionHead" style={{marginTop: 44}}>
         <h2>Series</h2>
-        <span>{series ? `${series.length} live` : ""}</span>
+        <span>{series ? `${series.length} live · click to switch` : ""}</span>
       </div>
 
       {err && <div className="skeleton">Could not reach Robinhood Chain testnet. {err}</div>}
@@ -99,16 +105,14 @@ export default function Home() {
         ))}
       </div>
 
+      {series && <Positions series={series} />}
+      {series && series[0] && <ParityPanel floorToken={series[0].floorToken} />}
+
       <p className="note">
         Deployed to Robinhood Chain testnet. The stock token and the price feed are stand-ins,
         because testnet carries neither — everything else is the real protocol.{" "}
-        <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.factory}`}>
-          Factory
-        </a>{" "}
-        ·{" "}
-        <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.hook}`}>
-          Parity hook
-        </a>
+        <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.factory}`}>Factory</a>{" "}
+        · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.hook}`}>Parity hook</a>
       </p>
     </div>
   );

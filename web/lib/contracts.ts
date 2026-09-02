@@ -11,6 +11,9 @@ export const ADDRESSES = {
   nvda: "0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1",
   feed: "0x6a985039287dC8BB054C36804eb75337f69f944F",
   usdg: "0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097",
+  hookLens: "0x414326E556667b5AE9931F67cDb267D1BAF7D1D0",
+  swapRouter: "0x83b5D54866A826426f4E413b668B587c052Ab824",
+  poolManager: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
 } as const;
 
 export const LENS_ABI = [
@@ -79,6 +82,39 @@ export const SERIES_ABI = [
   {type: "function", name: "claimUpside", stateMutability: "nonpayable",
    inputs: [{name: "amount", type: "uint256"}, {name: "to", type: "address"}],
    outputs: [{name: "paid", type: "uint256"}]},
+  {type: "function", name: "settle", stateMutability: "nonpayable",
+   inputs: [{name: "roundId", type: "uint80"}], outputs: []},
+  {type: "function", name: "claimsUnlockAt", stateMutability: "view", inputs: [],
+   outputs: [{type: "uint64"}]},
+  {type: "function", name: "CHALLENGE_PERIOD", stateMutability: "view", inputs: [],
+   outputs: [{type: "uint256"}]},
+] as const;
+
+export const HOOK_LENS_ABI = [
+  {
+    type: "function", name: "parity", stateMutability: "view",
+    inputs: [{name: "hook", type: "address"}],
+    outputs: [{
+      type: "tuple",
+      components: [
+        {name: "hook", type: "address"},
+        {name: "series", type: "address"},
+        {name: "quote", type: "address"},
+        {name: "underlyingPrice", type: "uint256"},
+        {name: "floorPrice", type: "uint256"},
+        {name: "upsidePrice", type: "uint256"},
+        {name: "sumOfHalves", type: "uint256"},
+        {name: "gapBps", type: "uint256"},
+        {name: "halvesDear", type: "bool"},
+        {name: "underlyingLiquidity", type: "uint128"},
+        {name: "floorLiquidity", type: "uint128"},
+        {name: "upsideLiquidity", type: "uint128"},
+        {name: "minDeviationBps", type: "uint256"},
+        {name: "maxArbSize", type: "uint256"},
+        {name: "wired", type: "bool"},
+      ],
+    }],
+  },
 ] as const;
 
 export const TOKEN_ABI = [
