@@ -7,6 +7,9 @@ import {robinhoodTestnet} from "@/lib/chain";
 import {PayoffChart} from "@/components/PayoffChart";
 import {SeriesCard, type SeriesView} from "@/components/SeriesCard";
 import {Mark} from "@/components/Mark";
+import {Connect} from "@/components/Connect";
+import {Split} from "@/components/Split";
+import {Faucet} from "@/components/Faucet";
 
 export default function Home() {
   const [series, setSeries] = useState<SeriesView[] | null>(null);
@@ -43,6 +46,7 @@ export default function Home() {
         <Mark />
         <div className="brand">Aarka</div>
         <div className="net">{robinhoodTestnet.name}</div>
+        <Connect />
       </header>
 
       <section className="hero">
@@ -66,12 +70,18 @@ export default function Home() {
             </h2>
             <span>what each half is worth at expiry — hover to read any price</span>
           </div>
-          <PayoffChart
-            strike={s.strike}
-            spot={s.priceValid ? s.spotPrice : undefined}
-            settlementPrice={s.settled ? s.settlementPrice : undefined}
-            underlyingSymbol={s.underlyingSymbol}
-          />
+          <div className="two">
+            <div>
+              <PayoffChart
+                strike={s.strike}
+                spot={s.priceValid ? s.spotPrice : undefined}
+                settlementPrice={s.settled ? s.settlementPrice : undefined}
+                underlyingSymbol={s.underlyingSymbol}
+              />
+              <Faucet symbol={s.underlyingSymbol} />
+            </div>
+            <Split s={s} />
+          </div>
         </>
       )}
 

@@ -5,12 +5,20 @@ import {usd, units, pct, expiryLabel, countdown} from "@/lib/format";
 
 export type SeriesView = {
   series: `0x${string}`;
+  underlying: `0x${string}`;
+  floorToken: `0x${string}`;
+  upsideToken: `0x${string}`;
   status: number;
   underlyingSymbol: string;
   strike: bigint;
   expiry: bigint;
   floorSymbol: string;
   upsideSymbol: string;
+  spotUpdatedAt: bigint;
+  oraclePaused: boolean;
+  claimsUnlockAt: bigint;
+  halfSupply: bigint;
+  feed: `0x${string}`;
   spotPrice: bigint;
   priceValid: boolean;
   settled: boolean;

@@ -87,6 +87,8 @@ export const TOKEN_ABI = [
   {type: "function", name: "approve", stateMutability: "nonpayable",
    inputs: [{name: "spender", type: "address"}, {name: "amount", type: "uint256"}],
    outputs: [{type: "bool"}]},
+  {type: "function", name: "allowance", stateMutability: "view",
+   inputs: [{name: "o", type: "address"}, {name: "s", type: "address"}], outputs: [{type: "uint256"}]},
   {type: "function", name: "claim", stateMutability: "nonpayable", inputs: [], outputs: []},
   {type: "function", name: "lastClaimed", stateMutability: "view",
    inputs: [{name: "a", type: "address"}], outputs: [{type: "uint256"}]},
