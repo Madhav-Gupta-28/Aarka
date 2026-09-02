@@ -238,6 +238,11 @@ contract AarkaFactory is Ownable {
     function _requireStrikeInBand(AggregatorV3Interface feed, uint256 strike) private view {
         (, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();
         if (answer <= 0 || updatedAt == 0) revert SpotUnavailable();
+        // A round dated in the future makes `block.timestamp - updatedAt` underflow, which panics
+        // instead of reverting with a name. Same defect the sequencer check had (AUDIT-06), and it
+        // was missed here. A feed reporting a future timestamp is telling you something is wrong
+        // with the feed, so treat it as unusable rather than letting the subtraction decide.
+        if (updatedAt > block.timestamp) revert SpotUnavailable();
         if (block.timestamp - updatedAt > BAND_MAX_STALENESS) revert SpotUnavailable();
 
         uint256 spot = uint256(answer);

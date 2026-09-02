@@ -37,10 +37,18 @@ const SWAP_ABI = [
  * The hook closes it inside the same transaction, before the swap returns. So the gap you see
  * after is not what the swap created — it is what survived the hook.
  */
-export function ParityPanel({floorToken}: {floorToken: `0x${string}`}) {
+type Half = "floor" | "upside";
+
+export function ParityPanel({
+  floorToken, upsideToken, floorSymbol, upsideSymbol,
+}: {
+  floorToken: `0x${string}`; upsideToken: `0x${string}`;
+  floorSymbol: string; upsideSymbol: string;
+}) {
+  const [half, setHalf] = useState<Half>("floor");
   const {address, isConnected} = useAccount();
   const [p, setP] = useState<Parity | null>(null);
-  const [phase, setPhase] = useState<"idle" | "approving" | "swapping">("idle");
+  const [phase, setPhase] = useState<string>("idle");
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
 
@@ -63,30 +71,43 @@ export function ParityPanel({floorToken}: {floorToken: `0x${string}`}) {
   useEffect(() => {
     if (!isSuccess) return;
     load();
-    if (phase === "approving") { setPhase("idle"); }
+    setPhase("idle");
     reset();
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!p || !p.wired) return null;
 
   const quote = p.quote;
-  const zeroForOne = quote.toLowerCase() < floorToken.toLowerCase();
-  const LIMIT = zeroForOne ? 4295128740n : 1461446703485210103287273052203988822378723970341n;
-  const key = zeroForOne
-    ? {currency0: quote, currency1: floorToken, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`}
-    : {currency0: floorToken, currency1: quote, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`};
+  const asset = half === "floor" ? floorToken : upsideToken;
+  const assetSymbol = half === "floor" ? floorSymbol : upsideSymbol;
+  const assetIsZero = asset.toLowerCase() < quote.toLowerCase();
 
-  function approve() {
-    setPhase("approving");
-    writeContract({address: quote, abi: TOKEN_ABI, functionName: "approve",
+  const MIN = 4295128740n;
+  const MAX = 1461446703485210103287273052203988822378723970341n;
+
+  const key = assetIsZero
+    ? {currency0: asset, currency1: quote, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`}
+    : {currency0: quote, currency1: asset, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`};
+
+  function approve(token: `0x${string}`, label: string) {
+    setPhase(label);
+    writeContract({address: token, abi: TOKEN_ABI, functionName: "approve",
                    args: [ADDRESSES.swapRouter as `0x${string}`, maxUint256]});
   }
 
-  function breakParity() {
-    setPhase("swapping");
+  /**
+   * Buying a half pushes its price up, so the two halves become dear against the stock and the
+   * hook mints to close the gap. Selling pushes it down, the halves go cheap, and the hook
+   * redeems instead. Both directions of the arb exist; showing only one hides half the mechanism.
+   */
+  function swap(dir: "buy" | "sell") {
+    setPhase(dir === "buy" ? "buying" : "selling");
+    // exact-input: spend quote to receive the asset, or spend the asset to receive quote
+    const zeroForOne = dir === "buy" ? !assetIsZero : assetIsZero;
+    const amountSpecified = dir === "buy" ? -50_000_000_000n : -250_000_000_000_000_000_000n;
     writeContract({
       address: ADDRESSES.swapRouter as `0x${string}`, abi: SWAP_ABI, functionName: "swap",
-      args: [key, {zeroForOne, amountSpecified: -50_000_000_000n, sqrtPriceLimitX96: LIMIT},
+      args: [key, {zeroForOne, amountSpecified, sqrtPriceLimitX96: zeroForOne ? MIN : MAX},
              {takeClaims: false, settleUsingBurn: false}, "0x"],
     });
   }
@@ -122,20 +143,43 @@ export function ParityPanel({floorToken}: {floorToken: `0x${string}`}) {
       {!isConnected ? (
         <button className="btn full" disabled>Connect a wallet to try it</button>
       ) : (
-        <div className="parityBtns">
-          <button className="btn" onClick={approve} disabled={busy}>
-            {phase === "approving" && busy ? "Approving…" : "1 · Approve USDG"}
-          </button>
-          <button className="btn primary" onClick={breakParity} disabled={busy}>
-            {phase === "swapping" && busy ? "Swapping…" : "2 · Buy $50k of the floor half"}
-          </button>
-        </div>
+        <>
+          <div className="tabs" style={{marginBottom: 12}}>
+            <button className={half === "floor" ? "on" : ""} onClick={() => setHalf("floor")}>
+              {floorSymbol}
+            </button>
+            <button className={half === "upside" ? "on" : ""} onClick={() => setHalf("upside")}>
+              {upsideSymbol}
+            </button>
+          </div>
+
+          <div className="parityBtns">
+            <button className="btn" onClick={() => approve(quote, "approving quote")} disabled={busy}>
+              {phase === "approving quote" && busy ? "Approving…" : "Approve USDG"}
+            </button>
+            <button className="btn" onClick={() => approve(asset, "approving half")} disabled={busy}>
+              {phase === "approving half" && busy ? "Approving…" : `Approve ${assetSymbol}`}
+            </button>
+          </div>
+
+          <div className="parityBtns" style={{marginTop: 10}}>
+            <button className="btn primary" onClick={() => swap("buy")} disabled={busy}>
+              {phase === "buying" && busy ? "Buying…" : `Buy $50k of ${assetSymbol}`}
+            </button>
+            <button className="btn primary" onClick={() => swap("sell")} disabled={busy}>
+              {phase === "selling" && busy ? "Selling…" : `Sell 250 ${assetSymbol}`}
+            </button>
+          </div>
+        </>
       )}
 
       <p className="hint">
-        That swap moves the floor pool hard enough to open a gap of several hundred basis points.
-        Watch the difference row — the hook has already closed it by the time the transaction
-        returns, so what you see is what survived, not what the swap created.
+        <b style={{color: "var(--paper)"}}>Buying</b> a half pushes its price up, so the two halves
+        become dear against the stock and the hook <b style={{color: "var(--paper)"}}>mints</b> to
+        close the gap. <b style={{color: "var(--paper)"}}>Selling</b> pushes it down, the halves go
+        cheap, and the hook <b style={{color: "var(--paper)"}}>redeems</b> instead. Either way the
+        gap you see afterwards is what survived the hook, not what the swap created — approve first,
+        selling needs a balance of that half.
       </p>
     </div>
   );

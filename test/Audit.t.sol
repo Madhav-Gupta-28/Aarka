@@ -148,4 +148,18 @@ contract AuditTest is BaseTest {
         assertTrue(factory.predictSeries(address(nvda), 240e8, EXPIRY2) != created, "prediction moved");
         assertEq(factory.seriesFor(address(nvda), 240e8, EXPIRY2), created, "the record did not");
     }
+
+    /// @notice AUDIT-15. A feed reporting a timestamp in the future made the freshness check in
+    ///         `_requireStrikeInBand` underflow and panic rather than revert with a name. Found on
+    ///         the live testnet deployment after a round was published with a future date: creating
+    ///         any new series panicked with 0x11 instead of failing cleanly.
+    ///
+    ///         Same defect as AUDIT-06, which was fixed for the sequencer feed and missed here.
+    function test_AUDIT15_futureDatedSpotIsRefusedCleanly() public {
+        _addExpiry(EXPIRY2);
+        feed.pushRound(500, 215e8, block.timestamp + 30 days);
+
+        vm.expectRevert(AarkaFactory.SpotUnavailable.selector);
+        factory.createSeries(address(nvda), 240e8, EXPIRY2);
+    }
 }

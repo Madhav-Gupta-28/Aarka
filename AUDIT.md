@@ -31,6 +31,7 @@ Testnet stand-ins in `src/testnet/` are out of scope; they never touch mainnet.
 | 08 | Info | `AarkaLens` used raw `*` and `/` where settlement uses `Math.mulDiv` | Fixed |
 | 09 | **Medium** | Hook price inversion divided by a truncated intermediate: panicked below `sqrtP = 2^48` and returned 26% wrong prices above it | Fixed |
 | 11 | Info | `AarkaLens.allSeries()` is unbounded over an attacker-growable list | Documented |
+| 15 | **Medium** | A future-dated feed round made the factory's freshness check underflow and panic, blocking all series creation | Fixed |
 
 ---
 
@@ -172,6 +173,38 @@ to 0 bps.
 Not a vulnerability: the lens is outside the protocol and holds nothing, `seriesPage` already exists
 and is unaffected, and no core function iterates the list. Documented in the contract so a front end
 does not reach for the wrong one.
+
+---
+
+### AUDIT-15 · Medium · A future-dated price panicked series creation
+
+Found on the live testnet deployment, not in review. `_requireStrikeInBand` computed
+
+```solidity
+if (block.timestamp - updatedAt > BAND_MAX_STALENESS) revert SpotUnavailable();
+```
+
+If a feed reports a timestamp **ahead** of the current block, that subtraction underflows and
+panics with `0x11` instead of reverting with a name. Every call to `createSeries` on that asset
+fails, and the panic says nothing about why.
+
+This is the same defect as [AUDIT-06](#audit-06-07-08--low-and-informational), which was fixed for
+the sequencer feed and **missed here**. Two places read a timestamp and subtract it; only one was
+hardened. That is the ordinary way a fix half-lands.
+
+**Fix.**
+
+```solidity
+if (updatedAt > block.timestamp) revert SpotUnavailable();
+```
+
+A feed reporting a future timestamp is telling you something is wrong with the feed. Treat it as
+unusable rather than letting the subtraction decide.
+
+**How it surfaced.** A settlement round was published on testnet with a deliberately future
+`updatedAt`, and creating a new series began panicking. Worth stating plainly: this was found by
+someone clicking around a deployment, not by the 148 tests or the line-by-line review — which is
+the argument for putting a thing in front of people early.
 
 ---
 

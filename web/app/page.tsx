@@ -106,7 +106,14 @@ export default function Home() {
       </div>
 
       {series && <Positions series={series} />}
-      {series && series[0] && <ParityPanel floorToken={series[0].floorToken} />}
+      {series && series[0] && (
+        <ParityPanel
+          floorToken={series[0].floorToken}
+          upsideToken={series[0].upsideToken}
+          floorSymbol={series[0].floorSymbol}
+          upsideSymbol={series[0].upsideSymbol}
+        />
+      )}
 
       <p className="note">
         Deployed to Robinhood Chain testnet. The stock token and the price feed are stand-ins,
