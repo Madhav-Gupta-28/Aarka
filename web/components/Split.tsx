@@ -72,7 +72,7 @@ export function Split({s}: {s: SeriesView}) {
   const label = busy
     ? (mining ? "Confirming…" : "Check your wallet…")
     : mode === "mint"
-      ? (needsApproval ? `Approve ${s.underlyingSymbol} first` : `Split ${amount || "0"} ${s.underlyingSymbol}`)
+      ? (needsApproval ? `Approve ${s.underlyingSymbol}` : `Deposit ${amount || "0"} ${s.underlyingSymbol}`)
       : `Return ${amount || "0"} of each half`;
 
   return (
@@ -105,6 +105,19 @@ export function Split({s}: {s: SeriesView}) {
         <div><span>{s.upsideSymbol}</span><b>{units(upsideBal ?? 0n)}</b></div>
       </div>
 
+      {mode === "mint" && !expired && isConnected && wei > 0n && (
+        <ol className="steps">
+          <li className={needsApproval ? (busy ? "doing" : "now") : "done"}>
+            <i>{needsApproval ? "1" : "✓"}</i>
+            <span>Let the vault move your {s.underlyingSymbol}</span>
+          </li>
+          <li className={!needsApproval ? (busy ? "doing" : "now") : ""}>
+            <i>2</i>
+            <span>Deposit and receive both halves</span>
+          </li>
+        </ol>
+      )}
+
       {mode === "mint" && expired ? (
         <button className="btn full" disabled>Series expired — splitting is closed</button>
       ) : !isConnected ? (
@@ -117,9 +130,11 @@ export function Split({s}: {s: SeriesView}) {
 
       {mode === "mint" && !expired && (
         <p className="hint">
-          {wei > 0n && !tooMuch
-            ? `You get ${units(wei)} ${s.floorSymbol} and ${units(wei)} ${s.upsideSymbol}.`
-            : " "}
+          {wei === 0n || tooMuch
+            ? " "
+            : needsApproval
+              ? "Two transactions. The first only grants permission, nothing moves until the second."
+              : `You get ${units(wei)} ${s.floorSymbol} and ${units(wei)} ${s.upsideSymbol}.`}
         </p>
       )}
     </div>
