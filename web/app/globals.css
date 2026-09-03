@@ -245,3 +245,77 @@ header {
 .steps li.done { color: var(--muted); }
 .steps li.done i { background: var(--ochre); border-color: var(--ochre); color: var(--ink); }
 @keyframes pulse { 0%,100% {opacity:1} 50% {opacity:.4} }
+
+/* ==========================================================================
+   Mobile
+   The layout is fluid down to 320px. Three things need real attention rather
+   than a column count: the header runs out of room first, the chart's labels
+   shrink with the SVG so their nominal size has to grow, and tap targets need
+   to clear ~44px.
+   ========================================================================== */
+
+.netShort { display: none; }
+
+@media (max-width: 720px) {
+  .wrap { padding: 0 16px 64px; }
+  header { padding: 18px 0 22px; gap: 10px; }
+  .brand { font-size: 17px; }
+
+  /* "Robinhood Chain Testnet" plus an address plus the mark does not fit. */
+  .netLong { display: none; }
+  .netShort { display: inline; }
+  .net { padding: 4px 9px; }
+
+  .hero { padding: 4px 0 30px; margin-bottom: 26px; }
+  .hero p { font-size: 15px; }
+
+  /* The SVG scales with its container, so labels have to be nominally larger
+     to land near 11px on screen. */
+  .chart .tick, .chart .strikeLabel, .chart .markerLabel { font-size: 17px; }
+  .chart svg { cursor: default; }
+
+  .legend { gap: 12px; font-size: 12.5px; }
+  .legend .sum { margin-left: 0; width: 100%; }
+
+  /* 300px minimum overflows a 320px viewport once padding is taken out. */
+  .grid { grid-template-columns: 1fr; gap: 12px; }
+
+  .two { gap: 20px; }
+  .panel, .card, .posRow { padding: 16px; }
+
+  /* Tap targets. 9px of padding leaves a ~34px button; this gets it over 44. */
+  .btn { padding: 12px 16px; font-size: 14px; }
+  .btn.full { padding: 14px; }
+  .tabs button { padding: 9px 18px; font-size: 13.5px; }
+
+  .amountRow { padding: 13px; }
+  .amountRow input { font-size: 20px; }
+
+  .faucet { flex-direction: column; align-items: stretch; gap: 12px; }
+  .faucet button { margin-left: 0; width: 100%; }
+
+  /* Two 190px buttons need 390px of room. Stack them instead. */
+  .parityBtns { flex-direction: column; gap: 8px; }
+  .parityBtns .btn { min-width: 0; width: 100%; }
+
+  .claimRow { flex-direction: column; align-items: stretch; gap: 10px; }
+  .claimRow .btn { width: 100%; }
+
+  .parity { margin-top: 36px; padding-top: 26px; }
+  .ledger { padding: 4px 14px; }
+  .lrow { font-size: 12.5px; }
+
+  .volRow { flex-wrap: wrap; }
+  .volRow input { flex: 1 1 100%; order: 3; }
+}
+
+@media (max-width: 460px) {
+  .posCells { grid-template-columns: 1fr; gap: 10px; }
+  .sectionHead { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .balances { gap: 14px; }
+  .halves { flex-direction: column; gap: 6px; }
+  .chart .tick, .chart .strikeLabel, .chart .markerLabel { font-size: 19px; }
+}
+
+/* Long addresses and symbols must never push the page sideways. */
+.half, .lrow b, .claimRow b, .posCells b { overflow-wrap: anywhere; }

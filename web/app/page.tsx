@@ -47,7 +47,10 @@ export default function Home() {
       <header>
         <Mark />
         <div className="brand">Aarka</div>
-        <div className="net">{robinhoodTestnet.name}</div>
+        <div className="net">
+          <span className="netLong">{robinhoodTestnet.name}</span>
+          <span className="netShort">Testnet</span>
+        </div>
         <Connect />
       </header>
 
