@@ -13,6 +13,9 @@ import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
+import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
 
 import {AarkaSeries} from "../src/AarkaSeries.sol";
@@ -35,6 +38,9 @@ import {TestUSDG} from "../src/testnet/TestUSDG.sol";
 ///        forge script script/DeployHook.s.sol --rpc-url robinhood_testnet --broadcast \
 ///          --private-key $PRIVATE_KEY --sig "run(address,address)" <SERIES> <NVDA>
 contract DeployHook is Script {
+    using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
+
     address constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
 
     /// @notice The canonical deterministic deployer Foundry routes `new X{salt: ...}` through.
@@ -72,11 +78,51 @@ contract DeployHook is Script {
         nvda = TestStockToken(nvdaAddr);
 
         vm.startBroadcast();
+        usdg = new TestUSDG();
         _deploy(msg.sender);
-        _initialisePools(nvdaAddr);
+        _initialisePools(nvdaAddr, P_UNDER, P_FLOOR, P_UPSIDE);
         _seed(msg.sender, nvdaAddr);
         vm.stopBroadcast();
 
+        _log();
+    }
+
+    /// @notice Hook a new series onto an existing deployment.
+    /// @dev Each hook is bound to one series, so a new series needs its own. This reuses the quote
+    ///      asset and the stock's existing pool rather than creating new ones, because the site and
+    ///      HookLens both address the stock pool by its key. If that pool has drifted from the
+    ///      feed, it is moved back to `pUnder` first, so all three pools open at parity with the
+    ///      real price. Prices are quote units per whole asset, 6 decimals.
+    ///
+    ///        forge script script/DeployHook.s.sol --rpc-url robinhood_testnet --broadcast \
+    ///          --private-key $PRIVATE_KEY --gas-limit 900000000 \
+    ///          --sig "runLive(address,address,address,address,uint256,uint256,uint256)" \
+    ///          <SERIES> <STOCK> <USDG> <SWAP_ROUTER> <P_UNDER> <P_FLOOR> <P_UPSIDE>
+    function runLive(
+        address seriesAddr,
+        address stockAddr,
+        address usdgAddr,
+        address swapRouter,
+        uint256 pUnder,
+        uint256 pFloor,
+        uint256 pUpside
+    ) external {
+        require(pFloor + pUpside == pUnder, "halves must sum to the stock price");
+        series = AarkaSeries(seriesAddr);
+        nvda = TestStockToken(stockAddr);
+        usdg = TestUSDG(usdgAddr);
+
+        vm.startBroadcast();
+        _deploy(msg.sender);
+        _initialisePools(stockAddr, pUnder, pFloor, pUpside);
+        _seed(msg.sender, stockAddr);
+        _realign(swapRouter, stockAddr, pUnder);
+        vm.stopBroadcast();
+
+        _log();
+    }
+
+    function _log() private view {
         console.log("");
         console.log("=== Aarka parity hook, Robinhood Chain testnet ===");
         console.log("TestUSDG              ", address(usdg));
@@ -91,7 +137,6 @@ contract DeployHook is Script {
     ///      mined before deployment. The constructor asserts the mining worked, which is what stops
     ///      a bad salt from silently producing a hook with the wrong permissions.
     function _deploy(address deployer) private {
-        usdg = new TestUSDG();
         router = new PoolModifyLiquidityTest(manager);
 
         bytes memory args = abi.encode(manager, series, Currency.wrap(address(usdg)), deployer);
@@ -109,7 +154,7 @@ contract DeployHook is Script {
     ///
     ///      The underlying pool carries no hook, mirroring mainnet where NVDA/USDG already exists
     ///      and a hook cannot be attached to a live pool.
-    function _initialisePools(address nvdaAddr) private {
+    function _initialisePools(address nvdaAddr, uint256 pUnder, uint256 pFloor, uint256 pUpside) private {
         address floorToken = address(series.floorToken());
         address upsideToken = address(series.upsideToken());
 
@@ -117,9 +162,12 @@ contract DeployHook is Script {
         floorKey = _key(floorToken, address(usdg), IHooks(address(hook)));
         upsideKey = _key(upsideToken, address(usdg), IHooks(address(hook)));
 
-        manager.initialize(underlyingKey, _sqrtPrice(underlyingKey, nvdaAddr, P_UNDER));
-        manager.initialize(floorKey, _sqrtPrice(floorKey, floorToken, P_FLOOR));
-        manager.initialize(upsideKey, _sqrtPrice(upsideKey, upsideToken, P_UPSIDE));
+        // The stock pool carries no hook, so it is shared by every series on this stock and may
+        // already exist. Only the two half pools are always new.
+        (uint160 existing,,,) = manager.getSlot0(underlyingKey.toId());
+        if (existing == 0) manager.initialize(underlyingKey, _sqrtPrice(underlyingKey, nvdaAddr, pUnder));
+        manager.initialize(floorKey, _sqrtPrice(floorKey, floorToken, pFloor));
+        manager.initialize(upsideKey, _sqrtPrice(upsideKey, upsideToken, pUpside));
 
         hook.wire(underlyingKey, floorKey, upsideKey);
         hook.setParams(30, 100_000e18);
@@ -139,6 +187,30 @@ contract DeployHook is Script {
         _addLiquidity(underlyingKey);
         _addLiquidity(floorKey);
         _addLiquidity(upsideKey);
+    }
+
+    /// @dev Move the shared stock pool to `pUnder` with a swap capped at that exact price. The
+    ///      stock pool has no hook, so this triggers no arbitrage; it only undoes earlier demo
+    ///      swaps so the three pools start from the price the feed reports.
+    function _realign(address swapRouter, address stockAddr, uint256 pUnder) private {
+        (uint160 current,,,) = manager.getSlot0(underlyingKey.toId());
+        uint160 target = _sqrtPrice(underlyingKey, stockAddr, pUnder);
+        if (current == target) return;
+
+        IERC20(stockAddr).approve(swapRouter, type(uint256).max);
+        IERC20(address(usdg)).approve(swapRouter, type(uint256).max);
+
+        bool zeroForOne = target < current;
+        PoolSwapTest(swapRouter).swap(
+            underlyingKey,
+            IPoolManager.SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: -int256(1e30),
+                sqrtPriceLimitX96: target
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
     }
 
     function _key(address a, address b, IHooks hooks_) internal pure returns (PoolKey memory) {
