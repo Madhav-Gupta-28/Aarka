@@ -1,17 +1,18 @@
 "use client";
 
 import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
-import {ADDRESSES, TOKEN_ABI} from "@/lib/contracts";
+import {TOKEN_ABI} from "@/lib/contracts";
 import {FAUCET_URL} from "@/lib/chain";
 
 /**
- * Anyone can mint themselves test NVDA, once an hour, with no permission from us.
+ * Anyone can mint themselves the test stock a series is written on, once an hour, with no
+ * permission from us.
  * That is deliberate: the demo has to be runnable by a stranger without asking.
  */
-export function Faucet({symbol}: {symbol: string}) {
+export function Faucet({symbol, token}: {symbol: string; token: `0x${string}`}) {
   const {address, isConnected} = useAccount();
   const {data: last, refetch} = useReadContract({
-    address: ADDRESSES.nvda as `0x${string}`, abi: TOKEN_ABI, functionName: "lastClaimed",
+    address: token, abi: TOKEN_ABI, functionName: "lastClaimed",
     args: address ? [address] : undefined, query: {enabled: !!address},
   });
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
@@ -36,8 +37,7 @@ export function Faucet({symbol}: {symbol: string}) {
       <button
         className="btn"
         disabled={!isConnected || busy || waiting}
-        onClick={() => writeContract({address: ADDRESSES.nvda as `0x${string}`,
-                                      abi: TOKEN_ABI, functionName: "claim"})}
+        onClick={() => writeContract({address: token, abi: TOKEN_ABI, functionName: "claim"})}
       >
         {!isConnected ? "Connect first" : busy ? "Claiming…" : waiting ? `Again in ${mins}m` : `Claim 100 ${symbol}`}
       </button>

@@ -18,7 +18,7 @@ import {ParityPanel} from "@/components/ParityPanel";
 
 export default function Home() {
   const [series, setSeries] = useState<SeriesView[] | null>(null);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -39,7 +39,21 @@ export default function Home() {
     return () => clearInterval(t);
   }, [load]);
 
-  const s = series?.[active];
+  // Open on the hooked series if it is still live, otherwise the nearest live one, so a first
+  // visit lands on something that can be split rather than on a series that expired weeks ago.
+  const defaultIndex = (() => {
+    if (!series?.length) return 0;
+    const hooked = series.findIndex(
+      (r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase() && r.status === 0);
+    if (hooked >= 0) return hooked;
+    const live = series
+      .map((r, i) => ({r, i}))
+      .filter(({r}) => r.status === 0)
+      .sort((a, b) => Number(a.r.expiry - b.r.expiry));
+    return live.length ? live[0].i : 0;
+  })();
+  const s = series?.[active ?? defaultIndex];
+  const hooked = series?.find((r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase());
   const expired = s ? s.status !== 0 : false;
 
   return (
@@ -83,7 +97,7 @@ export default function Home() {
                 underlyingSymbol={s.underlyingSymbol}
               />
               <Indicative s={s} />
-              <Faucet symbol={s.underlyingSymbol} />
+              <Faucet symbol={s.underlyingSymbol} token={s.underlying} />
             </div>
 
             <div>
@@ -96,7 +110,7 @@ export default function Home() {
 
       <div className="sectionHead" style={{marginTop: 44}}>
         <h2>Series</h2>
-        <span>{series ? `${series.length} live · click to switch` : ""}</span>
+        <span>{series ? `${series.filter((r) => r.status === 0).length} live of ${series.length} · click to switch` : ""}</span>
       </div>
 
       {err && <div className="skeleton">Could not reach Robinhood Chain testnet. {err}</div>}
@@ -109,12 +123,12 @@ export default function Home() {
       </div>
 
       {series && <Positions series={series} />}
-      {series && series[0] && (
+      {hooked && (
         <ParityPanel
-          floorToken={series[0].floorToken}
-          upsideToken={series[0].upsideToken}
-          floorSymbol={series[0].floorSymbol}
-          upsideSymbol={series[0].upsideSymbol}
+          floorToken={hooked.floorToken}
+          upsideToken={hooked.upsideToken}
+          floorSymbol={hooked.floorSymbol}
+          upsideSymbol={hooked.upsideSymbol}
         />
       )}
 
