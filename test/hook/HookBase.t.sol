@@ -67,6 +67,7 @@ contract HookBaseTest is Test {
     AarkaToken f;
     AarkaToken u;
     AarkaParityHook hook;
+    AarkaFactory factory;
 
     PoolKey underlyingKey;
     PoolKey floorKey;
@@ -94,7 +95,7 @@ contract HookBaseTest is Test {
         MockSequencerFeed seq = new MockSequencerFeed();
 
         ExpiryCalendar calendar = new ExpiryCalendar(owner);
-        AarkaFactory factory = new AarkaFactory(owner, calendar, AggregatorV3Interface(address(seq)));
+        factory = new AarkaFactory(owner, calendar, AggregatorV3Interface(address(seq)));
 
         vm.startPrank(owner);
         uint64[] memory dates = new uint64[](1);
