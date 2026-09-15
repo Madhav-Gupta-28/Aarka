@@ -10,7 +10,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 
 import {AarkaToken} from "./AarkaToken.sol";
 import {DateLib} from "./libraries/DateLib.sol";
-import {AggregatorV3Interface, IOraclePausable} from "./interfaces/IExternal.sol";
+import {AggregatorV3Interface, IOraclePausable, IScaledUIAmountNewUIMultiplier} from "./interfaces/IExternal.sol";
 
 /// @title AarkaSeries
 /// @notice An isolated vault for one (underlying, strike, expiry). Splits a tokenized stock into
@@ -40,12 +40,29 @@ contract AarkaSeries is ReentrancyGuardTransient {
     uint8 public constant FEED_DECIMALS = 8;
 
     /// @notice How far before expiry the settlement round may have been published.
-    /// @dev 6 hours. A US session is 6.5 hours, so this guarantees the round came from the same
-    ///      session as the close it settles. Measured worst intra-session gap on NVDA was 2.63h,
-    ///      so this clears reality by 2.3x. It doubles as the corporate-action pause detector:
-    ///      while paused the feed stops publishing, so no round exists in the window and settle
-    ///      reverts on its own. See ARCHITECTURE.md section 7.5 and appendix A.2.
-    uint256 public constant MAX_SETTLEMENT_LOOKBACK = 6 hours;
+    /// @dev 26 hours: the feeds' 24-hour heartbeat plus two hours of margin.
+    ///
+    ///      Robinhood Chain's equity feeds publish on a 0.5% move or once a day. A calm session
+    ///      therefore produces no rounds at all, and until the next one is published the last price
+    ///      is still within 0.5% of the market — that is what the deviation threshold guarantees.
+    ///      So an old round on a quiet day is accurate, not stale.
+    ///
+    ///      This used to be 6 hours, chosen to keep the round inside the closing session and to
+    ///      detect a corporate-action pause by the silence it causes. On a quiet ticker it stranded
+    ///      people instead: SPY's last round before the 11 Sep 2026 close was 7.1 hours old, so a
+    ///      SPY series expiring that day could never have settled, and anyone holding one half
+    ///      could never have claimed. The pause is now checked explicitly. See AUDIT-16.
+    uint256 public constant MAX_SETTLEMENT_AGE = 26 hours;
+
+    /// @notice After this long unsettled, settlement accepts the last round before expiry at any
+    ///         age, and stops requiring the sequencer to be up or the asset to be unpaused.
+    /// @dev The last resort, and the reason a series always resolves. If the feed was deprecated,
+    ///      the asset paused for weeks or the sequencer feed misconfigured, the normal path refuses
+    ///      forever — and a holder of one half cannot recombine their way out. A week of refusal
+    ///      is enough for any of those to be a real failure rather than a pause. A late price is a
+    ///      worse price; no price is worse still. The challenge window still applies, so a
+    ///      strictly later round at or before expiry replaces it.
+    uint256 public constant LATE_SETTLEMENT_DELAY = 7 days;
 
     /// @notice Window in which a settlement may be replaced by a strictly better round.
     uint256 public constant CHALLENGE_PERIOD = 1 hours;
@@ -77,6 +94,8 @@ contract AarkaSeries is ReentrancyGuardTransient {
     uint256 public floorPayoutPerUnit; // 18 decimals
     uint256 public upsidePayoutPerUnit; // 18 decimals
     uint64 public claimsUnlockAt;
+    /// @notice True when the series was settled through the late path.
+    bool public settledLate;
 
     // --------------------------------------------------------------------
     // Events
@@ -112,6 +131,7 @@ contract AarkaSeries is ReentrancyGuardTransient {
     error SequencerDown();
     error SequencerGracePeriod();
     error RoundIdOverflow();
+    error CorporateActionBeforeExpiry();
 
     // --------------------------------------------------------------------
     // Construction
@@ -144,11 +164,17 @@ contract AarkaSeries is ReentrancyGuardTransient {
         string memory tag = DateLib.toTag(expiry_);
         string memory usd = _usd(strike_);
 
+        // The strike goes in the symbol as well as the name. Wallets and token lists show the
+        // symbol, and two series on the same expiry used to share one: fNVDA-30OCT26 was both the
+        // $210 and the $230 floor. The strike is the one term a buyer must not get wrong. AUDIT-17.
+        string memory strikeTag = _strikeTag(strike_);
         floorToken = new AarkaToken(
-            string.concat("Aarka Floor ", ticker, " ", tag, " $", usd), string.concat("f", ticker, "-", tag)
+            string.concat("Aarka Floor ", ticker, " ", tag, " $", usd),
+            string.concat("f", ticker, "-", strikeTag, "-", tag)
         );
         upsideToken = new AarkaToken(
-            string.concat("Aarka Upside ", ticker, " ", tag, " $", usd), string.concat("u", ticker, "-", tag)
+            string.concat("Aarka Upside ", ticker, " ", tag, " $", usd),
+            string.concat("u", ticker, "-", strikeTag, "-", tag)
         );
     }
 
@@ -178,8 +204,9 @@ contract AarkaSeries is ReentrancyGuardTransient {
 
     /// @notice Return one of each half, receive one underlying.
     /// @dev Never disabled. Before expiry, after expiry, after settlement, or with a permanently
-    ///      dead oracle, this always works. It is the reason the protocol needs no admin: if
-    ///      settlement never happens, everyone still gets their stock token back.
+    ///      dead oracle, a holder of both halves can always get their stock token back. A holder of
+    ///      one half depends on settlement instead, which is why settlement has a late path and
+    ///      always resolves eventually.
     ///
     ///      Safe after settlement because floorPayoutPerUnit + upsidePayoutPerUnit == ONE exactly,
     ///      so a pair is worth precisely one underlying and never more.
@@ -201,19 +228,34 @@ contract AarkaSeries is ReentrancyGuardTransient {
     /// @dev Takes a roundId rather than reading the latest price. The caller supplies a candidate
     ///      and the contract proves it is the right one, so the caller chooses when to transact
     ///      but has no influence over what price results.
+    ///
+    ///      Two paths, and every series reaches one of them:
+    ///
+    ///        normal  the round is at most MAX_SETTLEMENT_AGE before expiry, the sequencer is up,
+    ///                the asset is not paused, and no corporate action landed after the round
+    ///        late    LATE_SETTLEMENT_DELAY after expiry, only the round pinning and the feed's
+    ///                decimals are still required
     function settle(uint80 roundId) external nonReentrant {
         if (block.timestamp < expiry) revert NotExpired();
         if (settled) revert AlreadySettled();
+        if (feed.decimals() != FEED_DECIMALS) revert UnexpectedFeedDecimals();
 
-        _requireSequencerUp();
-        _requireFeedSane();
+        bool late = block.timestamp >= expiry + LATE_SETTLEMENT_DELAY;
+        if (!late) {
+            _requireSequencerUp();
+            if (hasOraclePause && IOraclePausable(address(underlying)).oraclePaused()) revert OraclePaused();
+        }
 
         (uint256 price, uint256 updatedAt) = _readRound(roundId);
         if (updatedAt > expiry) revert RoundAfterExpiry();
-        if (expiry - updatedAt > MAX_SETTLEMENT_LOOKBACK) revert RoundTooOld();
+        if (!late) {
+            if (expiry - updatedAt > MAX_SETTLEMENT_AGE) revert RoundTooOld();
+            _requireNoCorporateActionSince(updatedAt);
+        }
         _requireNoLaterRound(roundId);
 
         settled = true;
+        settledLate = late;
         claimsUnlockAt = uint64(block.timestamp + CHALLENGE_PERIOD);
         _record(roundId, price, updatedAt);
         emit Settled(roundId, price, updatedAt, floorPayoutPerUnit);
@@ -313,9 +355,17 @@ contract AarkaSeries is ReentrancyGuardTransient {
         }
     }
 
-    function _requireFeedSane() private view {
-        if (feed.decimals() != FEED_DECIMALS) revert UnexpectedFeedDecimals();
-        if (hasOraclePause && IOraclePausable(address(underlying)).oraclePaused()) revert OraclePaused();
+    /// @dev A corporate action that took effect after the settlement round and at or before expiry
+    ///      means the round may describe the token as it was before the action. This replaces what
+    ///      the old six-hour bound did implicitly — a pause during an action silenced the feed and
+    ///      settlement blocked itself — with a check that says what it is checking. Probed, not
+    ///      required: a token without ERC-8056 is not gated on it.
+    function _requireNoCorporateActionSince(uint256 updatedAt) private view {
+        (bool ok, bytes memory data) =
+            address(underlying).staticcall(abi.encodeCall(IScaledUIAmountNewUIMultiplier.effectiveAt, ()));
+        if (!ok || data.length != 32) return;
+        uint256 effectiveAt = abi.decode(data, (uint256));
+        if (effectiveAt > updatedAt && effectiveAt <= expiry) revert CorporateActionBeforeExpiry();
     }
 
     /// @dev Robinhood Chain is an Arbitrum Orbit L2. A stalled sequencer freezes feed updates while
@@ -342,6 +392,14 @@ contract AarkaSeries is ReentrancyGuardTransient {
     /// @notice What one unit of each half pays, in units of the underlying.
     function payouts() external view returns (uint256 floorPayout, uint256 upsidePayout) {
         return (floorPayoutPerUnit, upsidePayoutPerUnit);
+    }
+
+    /// @dev "210" for $210.00, "212.50" for $212.50. The factory only accepts whole-cent strikes, so
+    ///      two different strikes can never render the same.
+    function _strikeTag(uint256 strike8) private pure returns (string memory) {
+        uint256 cents = (strike8 % 1e8) / 1e6;
+        if (cents == 0) return Strings.toString(strike8 / 1e8);
+        return string.concat(Strings.toString(strike8 / 1e8), ".", cents < 10 ? "0" : "", Strings.toString(cents));
     }
 
     function _usd(uint256 strike8) private pure returns (string memory) {

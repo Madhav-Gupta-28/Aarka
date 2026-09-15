@@ -9,8 +9,8 @@ contract AarkaSeriesTest is BaseTest {
     // ---------------------------------------------------------------- naming
 
     function test_tokenNamingIsDerivedOnChain() public view {
-        assertEq(f.symbol(), "fNVDA-25SEP26");
-        assertEq(u.symbol(), "uNVDA-25SEP26");
+        assertEq(f.symbol(), "fNVDA-230-25SEP26");
+        assertEq(u.symbol(), "uNVDA-230-25SEP26");
         assertEq(f.name(), "Aarka Floor NVDA 25SEP26 $230.00");
         assertEq(u.name(), "Aarka Upside NVDA 25SEP26 $230.00");
     }

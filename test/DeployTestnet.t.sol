@@ -96,8 +96,8 @@ contract DeployTestnetTest is Test {
         assertEq(address(series.feed()), address(feed));
         assertEq(series.strike(), 215e8);
         assertTrue(series.hasOraclePause(), "the stand-in must expose oraclePaused like mainnet");
-        assertEq(series.floorToken().symbol(), "fNVDA-02OCT26");
-        assertEq(series.upsideToken().symbol(), "uNVDA-02OCT26");
+        assertEq(series.floorToken().symbol(), "fNVDA-215-02OCT26");
+        assertEq(series.upsideToken().symbol(), "uNVDA-215-02OCT26");
     }
 
     function test_faucetLetsAnyoneStart() public {

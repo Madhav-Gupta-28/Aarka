@@ -37,17 +37,17 @@ contract SettlementTest is BaseTest {
         series.settle(200);
     }
 
-    /// @dev Also the corporate-action pause detector and the off-hours detector. While the feed
-    ///      is not publishing, no round exists inside the window and settlement blocks itself.
-    function test_rejectsRoundOlderThanTheLookback() public {
-        feed.pushRound(200, 250e8, EXPIRY - 7 hours);
+    /// @dev Older than the heartbeat plus margin, the feed has missed a heartbeat and the round is
+    ///      no longer evidence of the price. Refused on the normal path.
+    function test_rejectsRoundOlderThanTheMaxAge() public {
+        feed.pushRound(200, 250e8, EXPIRY - 27 hours);
         vm.warp(EXPIRY + 1);
         vm.expectRevert(AarkaSeries.RoundTooOld.selector);
         series.settle(200);
     }
 
-    function test_acceptsRoundExactlyAtTheLookbackBound() public {
-        feed.pushRound(200, 250e8, EXPIRY - 6 hours);
+    function test_acceptsRoundExactlyAtTheMaxAge() public {
+        feed.pushRound(200, 250e8, EXPIRY - 26 hours);
         vm.warp(EXPIRY + 1);
         series.settle(200);
         assertEq(series.settlementPrice(), 250e8);

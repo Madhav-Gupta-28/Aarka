@@ -23,6 +23,8 @@ contract ForkTest is Test {
 
     address constant NVDA_FEED = 0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15;
     address constant AAPL_FEED = 0x6B22A786bAa607d76728168703a39Ea9C99f2cD0;
+    address constant SPY = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
+    address constant SPY_FEED = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
 
     address constant V4_POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
 
@@ -73,17 +75,20 @@ contract ForkTest is Test {
         (, int256 answer,, uint256 updatedAt,) = feed.getRoundData(target);
         (,,, uint256 nextUpdatedAt,) = feed.getRoundData(target + 1);
         uint64 expiry = uint64(updatedAt + (nextUpdatedAt - updatedAt) / 2);
-        assertLe(expiry - updatedAt, 6 hours, "gap must fit inside MAX_SETTLEMENT_LOOKBACK");
+        assertLe(expiry - updatedAt, 26 hours, "gap must fit inside MAX_SETTLEMENT_AGE");
 
         uint256 settlementPrice = uint256(answer);
-        uint256 strike = settlementPrice / 2; // deep in the money, so both legs pay out
+        // Deep in the money, so both legs pay out. Whole dollars, as the factory would require.
+        uint256 strike = (settlementPrice / 2) / 1e8 * 1e8;
 
         AarkaSeries series = new AarkaSeries(
             nvda, feed, AggregatorV3Interface(address(0)), strike, expiry
         );
 
         // Real token naming, derived on-chain from the real symbol.
-        assertEq(series.floorToken().symbol(), string.concat("fNVDA-", _tag(expiry)));
+        assertEq(
+            series.floorToken().symbol(), string.concat("fNVDA-", vm.toString(strike / 1e8), "-", _tag(expiry))
+        );
 
         // The settleable round is in the past relative to the fork block, so wind the clock back
         // to inside the series' life in order to mint.
@@ -110,9 +115,12 @@ contract ForkTest is Test {
         uint256 paidUpside = series.claimUpside(100e18, alice);
         vm.stopPrank();
 
-        // Strike is half of spot, so the floor keeps half and the upside keeps half.
-        assertApproxEqRel(paidFloor, 50e18, 1e15);
-        assertApproxEqRel(paidUpside, 50e18, 1e15);
+        // Strike is about half of spot, so each leg takes about half: exactly 100 tokens times the
+        // per-unit payout the contract fixed, and the two differ from 100 by rounding dust only.
+        assertEq(paidFloor, 100e18 * series.floorPayoutPerUnit() / 1e18);
+        assertEq(paidUpside, 100e18 * series.upsidePayoutPerUnit() / 1e18);
+        assertApproxEqRel(paidFloor, 100e18 * strike / settlementPrice, 1e12);
+        assertLe(paidFloor + paidUpside, 100e18);
         assertEq(paidFloor + paidUpside, 100e18, "conservation, to the wei");
         assertEq(nvda.balanceOf(address(series)), 0, "vault fully drained, nothing stranded");
     }
@@ -144,9 +152,10 @@ contract ForkTest is Test {
         vm.prank(owner);
         factory.registerAsset(NVDA, feed);
 
-        (, int256 spot,,,) = feed.latestRoundData();
-        address series = factory.createSeries(NVDA, uint256(spot), expiry);
-        assertEq(series, factory.seriesFor(NVDA, uint256(spot), expiry));
+        (, int256 answer,,,) = feed.latestRoundData();
+        uint256 spot = uint256(answer) / 1e6 * 1e6; // strikes are whole cents
+        address series = factory.createSeries(NVDA, spot, expiry);
+        assertEq(series, factory.seriesFor(NVDA, spot, expiry));
         assertEq(address(AarkaSeries(series).underlying()), NVDA);
     }
 
@@ -166,7 +175,30 @@ contract ForkTest is Test {
         factory.registerAsset(AAPL, AggregatorV3Interface(AAPL_FEED));
 
         (, int256 spot,,,) = AggregatorV3Interface(AAPL_FEED).latestRoundData();
-        factory.createSeries(AAPL, uint256(spot), expiry); // must not revert
+        factory.createSeries(AAPL, uint256(spot) / 1e6 * 1e6, expiry); // must not revert
+    }
+
+    /// @notice AUDIT-16 against the real chain. SPY's last round before the Friday 11 September 2026
+    ///         close was published seven hours earlier. Under the old six-hour bound a SPY series
+    ///         expiring that day could never settle. Replayed here on the real token and feed.
+    function test_AUDIT16_theRealSpyCloseOnElevenSeptemberSettles() public {
+        uint64 expiry = 1_789_156_800; // Fri 11 Sep 2026 16:00 ET
+        uint80 roundId = uint80((uint256(1) << 64) | 126);
+        AggregatorV3Interface spyFeed = AggregatorV3Interface(SPY_FEED);
+
+        (,,, uint256 updatedAt,) = spyFeed.getRoundData(roundId);
+        (,,, uint256 nextAt,) = spyFeed.getRoundData(roundId + 1);
+        assertLe(updatedAt, expiry, "round 126 is the last before the close");
+        assertGt(nextAt, expiry, "and the next came after it");
+        assertGt(expiry - updatedAt, 6 hours, "the gap the old bound refused");
+
+        AarkaSeries series = new AarkaSeries(IERC20(SPY), spyFeed, AggregatorV3Interface(address(0)), 760e8, expiry);
+        assertEq(series.floorToken().symbol(), "fSPY-760-11SEP26");
+
+        if (block.timestamp < expiry) vm.warp(expiry + 1);
+        series.settle(roundId);
+        assertTrue(series.settled());
+        assertEq(series.floorPayoutPerUnit() + series.upsidePayoutPerUnit(), 1e18);
     }
 
     // ---------------------------------------------------------------- helpers

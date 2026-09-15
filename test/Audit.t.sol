@@ -118,7 +118,10 @@ contract AuditTest is BaseTest {
         nvda.setOraclePaused(true); // asset paused
         vm.warp(EXPIRY + 400 days); // long past expiry, unsettleable
 
-        vm.expectRevert(AarkaSeries.SequencerDown.selector);
+        // Past the late-settlement delay the sequencer and the pause are no longer required, but a
+        // feed reporting the wrong decimals still is: a mis-scaled price is not a late price, it is
+        // a wrong one. So this one stays unsettleable, and pairs remain the way out.
+        vm.expectRevert(AarkaSeries.UnexpectedFeedDecimals.selector);
         s.settle(200);
 
         vm.prank(alice);

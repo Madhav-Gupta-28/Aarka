@@ -31,6 +31,11 @@ contract AarkaFactory is Ownable {
     ///         arithmetic explicitly rather than relying on mulDiv's 512-bit intermediate alone.
     uint256 public constant MAX_STRIKE = 1e18;
 
+    /// @notice Strikes must be whole cents: 8-decimal feed units, so 1e6 is one cent.
+    /// @dev Token names and symbols render the strike to the cent. A sub-cent strike would give two
+    ///      different series identical names and symbols. AUDIT-17.
+    uint256 public constant STRIKE_TICK = 1e6;
+
     /// @notice Fat-finger band on the strike, as a divisor and multiplier of spot.
     uint256 public constant STRIKE_BAND = 5;
 
@@ -144,7 +149,7 @@ contract AarkaFactory is Ownable {
         if (address(feed) == address(0)) revert AssetNotRegistered();
         if (feed.decimals() != 8) revert UnexpectedFeedDecimals();
 
-        if (strike == 0 || strike > MAX_STRIKE) revert InvalidStrike();
+        if (strike == 0 || strike > MAX_STRIKE || strike % STRIKE_TICK != 0) revert InvalidStrike();
         if (!calendar.isValidExpiry(expiry)) revert InvalidExpiry();
         if (expiry < block.timestamp + MIN_TENOR) revert TenorTooShort();
         if (expiry > block.timestamp + MAX_TENOR) revert TenorTooLong();
