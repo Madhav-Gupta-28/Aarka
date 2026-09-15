@@ -23,4 +23,9 @@ jobs:
       - name: Mirror
         env:
           PRIVATE_KEY: ${{ secrets.TESTNET_FEED_KEY }}
-        run: ./script/mirror-feeds.sh
+        run: |
+          if [ -z "$PRIVATE_KEY" ]; then
+            echo "TESTNET_FEED_KEY is not set, skipping"
+            exit 0
+          fi
+          ./script/mirror-feeds.sh
