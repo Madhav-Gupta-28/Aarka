@@ -221,7 +221,7 @@ exactly 1 per pair, because claiming the two halves separately floors twice. Wri
 operation reduces the balance by no more than it reduces `W`, so `balance >= W` is preserved. Held
 across **256,000 randomised calls** with zero failures.
 
-**The escape hatch, tested directly.** `test_AUDIT07` corrupts the feed decimals, pauses the asset,
+**The escape hatch, tested directly** — for holders of both halves; see AUDIT-16 for everyone else. `test_AUDIT07` corrupts the feed decimals, pauses the asset,
 reports the sequencer down, and warps 400 days past an unsettleable expiry — then withdraws every
 token. No admin, no timelock, no multisig. That is the property the no-admin design rests on and it
 is now asserted rather than argued.
@@ -284,3 +284,162 @@ Stated rather than hidden, because a review that lists no residual risk has not 
 ```
 
 Every fix above ships with the PoC that found it, inverted into a regression test.
+
+---
+
+# Second review — 15 September 2026
+
+Everything re-read line by line after the frontend, the testnet refresh and the feed mirror landed:
+contracts, hook, lenses, scripts and every component in `web/`. Claims were checked against the
+chain and the compiler rather than against this document, and two attacks were measured with
+proof-of-concept tests before anything was written about them.
+
+| # | Severity | Issue | Status |
+| --- | --- | --- | --- |
+| 16 | **High** | A series with no feed round in the six hours before expiry can never settle, and a holder of only one half then has no way out | **Open — needs a contract change** |
+| 17 | **Medium** | Token symbols do not include the strike, so two series on the same expiry share a symbol | Open — needs a contract change |
+| 18 | **Medium** | Wallet writes on the site were not pinned to Robinhood Chain | Fixed |
+| 19 | Low | The site reads `allSeries`, which the lens itself says not to use past a small deployment | Open |
+| 20 | Low | The feed mirror would run with the key that owns the factory, calendar and both feeds | Open — decide before enabling it |
+| 21 | Low | The "max" button broke on any balance of 1,000 or more | Fixed |
+| 22 | Low | The README and this document overstated test coverage and the escape hatch | Fixed |
+| — | Info | Two economic attacks on the hook were measured and neither pays | Recorded in `test/hook/EconomicAudit.t.sol` |
+
+---
+
+### AUDIT-16 · High · A quiet close makes a series unsettleable, and one-leg holders are stranded
+
+`settle` accepts only a round published within `MAX_SETTLEMENT_LOOKBACK = 6 hours` before expiry,
+and no later round can ever satisfy "at or before expiry" once the clock has passed it. So if the
+feed publishes nothing in that window, the series is **permanently** unsettleable.
+
+That was treated as safe because `redeem` is never disabled (see the AUDIT-07 escape hatch above).
+It is safe **only for someone holding both halves**. The product exists so that people hold one:
+the whole flow is "split, then sell the half you don't want". A holder of the floor alone, or the
+upside alone, has nothing to redeem against and no claim to make. Their tokens are worth nothing
+until the other half can be found, and nothing obliges anyone to sell it back.
+
+The window is not a theoretical miss. Robinhood Chain's equity feeds publish on a **0.5% deviation
+or a 24-hour heartbeat**, so a calm session produces no rounds at all. Read from mainnet:
+
+```
+SPY / USD   round 126   Fri 11 Sep 12:56 UTC   $765.26
+            (close)     Fri 11 Sep 20:00 UTC   ← 7.1 hours after the last round
+SPY / USD   round 127   Mon 14 Sep 00:00 UTC   $760.04
+```
+
+A SPY series expiring 11 September 2026 could never have been settled. The same week NVDA's last
+round before the close was 3.7 hours old, inside the window with little to spare, and SPY's feed has
+published 129 rounds since launch against NVDA's 1,037. The original lookback was derived from one
+ticker on an earnings week; open item 7 in `ARCHITECTURE.md` said to re-measure on a calm week and a
+low-volatility name, and this is what that measurement shows.
+
+**Why the fix is not "widen the window".** The deviation threshold means an older round is still
+within 0.5% of the market until the next one is published, so a longer lookback — the heartbeat plus
+a margin — is defensible for accuracy. But the 6-hour bound also detects a corporate-action pause,
+because a paused feed stops publishing. Widening it removes that signal.
+
+**Recommended.** Separate the two jobs. Accept the last round at or before expiry up to the
+heartbeat, check `oraclePaused()` and the ERC-8056 multiplier at settlement time for the pause
+case, and add a last-resort path: if a series is still unsettled some days after expiry, allow
+settlement against the first round published *after* expiry. A slightly late price is far better
+than no price for someone holding one half.
+
+Not fixed here, because every deployed series carries the constant in its bytecode. It needs a new
+`AarkaSeries`, a new factory and a redeploy, and should land before any series is written on SPY,
+QQQ or another low-volatility asset.
+
+---
+
+### AUDIT-17 · Medium · Symbols do not distinguish strikes
+
+`fNVDA-30OCT26` is the symbol of **both** the $210 and the $230 floor tokens on testnet today,
+read back from the lens. The strike is in `name()` by design (`ARCHITECTURE.md` §5.2), but wallets
+and most DEX token lists show the symbol. A buyer choosing between two tokens that look identical
+can pick the wrong strike, and anyone can create a same-expiry series to sit next to a popular one.
+
+Separately, `name()` renders the strike to the cent, so two strikes differing by less than a cent
+produce byte-identical names **and** symbols.
+
+**Recommended.** Put the strike in the symbol (`fNVDA-210-30OCT26`) and require strikes to be whole
+cents in `createSeries`. Needs a redeploy, so it belongs in the same release as AUDIT-16.
+
+---
+
+### AUDIT-18 · Medium · Wallet writes were not pinned to the chain
+
+Every `writeContract` on the site — approve, deposit, recombine, settle, claim, faucet and both
+parity swaps — was sent to whichever chain the wallet happened to be on. The header offers a
+"switch network" button, but nothing stopped a connected wallet on another network from signing an
+unlimited `approve` to an address that means something else there.
+
+**Fix.** Every write now passes `chainId: robinhoodTestnet.id`, so wagmi refuses to send it to any
+other chain.
+
+---
+
+### AUDIT-19 · Low · The site ignores the lens's own advice
+
+`AarkaLens.allSeries` is documented as unsuitable past a small deployment, and series creation is
+permissionless, so anyone can grow the list until the page's single read no longer fits an
+`eth_call`. The site calls exactly that function, and `positionsOf` has the same shape. At 15
+series this is nowhere near the limit. It becomes a one-transaction-per-series way to take the page
+down on mainnet.
+
+**Recommended.** Page with `seriesPage`, and list only open and claimable series.
+
+---
+
+### AUDIT-20 · Low · One key would own everything the mirror touches
+
+`script/mirror-feeds.sh` needs a key that owns the two testnet feeds. The obvious one is the
+deployer, which also owns the factory, the calendar and the hook. Putting it in a CI secret widens
+the blast radius of that secret to the whole testnet deployment: a leak could publish any price and
+settle any series against it.
+
+**Recommended.** Transfer ownership of the two `TestAggregator` feeds to a fresh key used only by the
+mirror, and store that one. Testnet only; on mainnet the feeds are Chainlink's.
+
+---
+
+### AUDIT-21 · Low · "max" broke on large balances
+
+The button filled the amount with a locale-formatted number, so a balance of 1,000 became the
+string `1,000`, which `parseUnits` rejects, leaving the deposit button dead. It also rounded to four
+decimals and could round **up** past the balance. Now uses `formatUnits` — exact, no separators.
+
+---
+
+### AUDIT-22 · Low · Overstated claims
+
+The README said "100% line and function coverage on `src/`". Measured: 100% on the five core
+contracts, 100% lines and 73% branches on the hook, 96% on `AarkaLens`, and **0% on `HookLens`**,
+which the parity panel depends on and which has no tests. The README also said that if the oracle
+dies "nothing is stranded", which AUDIT-16 shows is true only for pair holders. Both corrected.
+Separately, `AarkaLens`'s header said every external read is wrapped; the series reads and the
+underlying's `balanceOf` are not.
+
+---
+
+### Measured and refuted
+
+**Manipulating the stock pool through the hook.** The hook treats the unhooked NVDA/USDG pool as the
+reference, so moving that pool drags both halves after it — confirmed: a 500 NVDA sale moved the
+stock pool 13%, and one dollar traded in the floor pool pulled the floor 6.9% and the upside 3.1%.
+The question is whether that pays. It does not. Round-tripping the stock pool through the hook cost
+the manipulator **−76,206 USDG against −2,288** for the identical round trip without triggering it,
+because the hook's arbitrage is taken out of the manipulator's own dislocation. Now a regression
+test.
+
+**Just-in-time liquidity taking the donation.** The hook donates to whoever is in range in the
+triggering pool at that moment. Across three position sizes and ranges, the JIT position lost more
+to the flow it absorbed than it earned from the donation (−24 to −1,686 USDG). Not ruled out against
+mostly uninformed flow, so donating to the trigger pool is still worth revisiting.
+
+## Verification, 15 September
+
+```
+152 unit, fuzz and invariant tests + 6 fork tests against Robinhood Chain mainnet, all passing
+forge lint: 0 errors; 9 unsafe-typecast warnings, each read and each guarded by a preceding check
+no private key in git history; .env never committed
+```

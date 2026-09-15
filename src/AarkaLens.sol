@@ -17,9 +17,10 @@ import {AggregatorV3Interface, IOraclePausable} from "./interfaces/IExternal.sol
 ///      replaced or ignored without any consequence for a deployed series, so nothing about the
 ///      security model depends on it.
 ///
-///      Every external read is wrapped, so one broken feed or one odd token cannot make the whole
-///      page fail to load. A view that cannot be filled comes back zeroed with `priceValid` false
-///      rather than reverting the batch.
+///      The feed, the pause flag and token symbols are read inside try/catch, so a broken feed or
+///      an odd token cannot make the whole page fail to load; those fields come back zeroed with
+///      `priceValid` false. Reads from the series itself and from the underlying's `balanceOf` are
+///      not wrapped, because every series is factory-deployed and every underlying is registered.
 contract AarkaLens {
     enum Status {
         Open, // before expiry: mint, redeem

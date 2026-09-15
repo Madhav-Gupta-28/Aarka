@@ -27,19 +27,30 @@ Built on Robinhood Chain.
 No proxies, no upgrades, no pause on user funds, no privileged withdrawal. Governance cannot move a
 token out of any series, and cannot touch a series that already exists.
 
-`redeem()` is never disabled, so if the oracle dies permanently nothing is stranded: hold both
-halves and withdraw.
+`redeem()` is never disabled, so anyone holding both halves can always withdraw, oracle or not.
+Someone holding only one half depends on settlement, and settlement needs a feed round in the six
+hours before expiry. On a quiet ticker that round may not exist — see
+[`AUDIT.md`](./AUDIT.md), AUDIT-16. That is the one open problem before mainnet.
 
 ## Tests
 
 ```
-forge test                                        # 149 tests
+forge test --no-match-path test/Fork.t.sol       # 152 tests
 forge test --match-path test/Fork.t.sol --fork-url robinhood   # against the live Chainlink feed
 forge coverage --no-match-coverage "test|script"
 ```
 
-100% line and function coverage on `src/`. The invariant suite runs 512 sequences of 64 random
-calls each and asserts the vault can always cover every outstanding claim.
+Plus 6 fork tests against Robinhood Chain mainnet. Coverage, measured with the command above:
+
+| Contract | Lines | Branches |
+| --- | --- | --- |
+| `AarkaSeries`, `AarkaFactory`, `AarkaToken`, `ExpiryCalendar`, `DateLib` | 100% | 100% |
+| `AarkaParityHook` | 100% | 73% |
+| `AarkaLens` | 96% | 83% |
+| `HookLens` | 0% — read-only helper for the site, not yet tested | — |
+
+The invariant suite runs 512 sequences of 64 random calls each and asserts the vault can always
+cover every outstanding claim.
 
 ## Deploying
 
