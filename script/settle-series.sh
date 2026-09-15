@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Settle a live series on Robinhood Chain testnet.
 #
-# settle() only accepts a round published at or before expiry, no more than six hours before it,
-# with no later round that is also at or before expiry. On mainnet the Chainlink feed already has
+# settle() only accepts a round published at or before expiry, at most MAX_SETTLEMENT_AGE (26 hours)
+# before it, with no later round that is also at or before expiry. On mainnet the Chainlink feed already has
 # that round. The testnet stand-in only publishes when we push to it, so:
 #
 #   - if a qualifying round already exists, settle against it
@@ -12,8 +12,10 @@
 # which is why the old version of this script, publishing at the current time, could never settle
 # anything once the series had actually expired.
 #
-#   ./script/settle-series.sh <SERIES_ADDRESS> <PRICE_8DP>
-#   ./script/settle-series.sh 0x0E67...F68c 26000000000     # $260.00
+# The fallback round is published with FEED_KEEPER_KEY, the key that owns the stand-in feeds
+# (AUDIT-20). With the feeds mirrored from mainnet the fallback should never be needed.
+#
+#   PRIVATE_KEY=... FEED_KEEPER_KEY=... ./script/settle-series.sh <SERIES_ADDRESS> <PRICE_8DP>
 set -euo pipefail
 
 SERIES="${1:?series address required}"
@@ -24,6 +26,7 @@ RPC="${RPC:-https://rpc.testnet.chain.robinhood.com}"
 
 FEED=$(cast call "$SERIES" "feed()(address)" --rpc-url "$RPC")
 EXPIRY=$(cast call "$SERIES" "expiry()(uint64)" --rpc-url "$RPC" | awk '{print $1}')
+MAX_AGE=$(cast call "$SERIES" "MAX_SETTLEMENT_AGE()(uint256)" --rpc-url "$RPC" | awk '{print $1}')
 NOW=$(cast block latest --field timestamp --rpc-url "$RPC")
 echo "series  $SERIES"
 echo "feed    $FEED"
@@ -45,7 +48,7 @@ ROUND=""
 ID=$LATEST
 for _ in $(seq 1 64); do
   AT=$(round_at "$ID" || true)
-  if [ -n "$AT" ] && [ "$AT" -le "$EXPIRY" ] && [ $(( EXPIRY - AT )) -le 21600 ]; then
+  if [ -n "$AT" ] && [ "$AT" -le "$EXPIRY" ] && [ $(( EXPIRY - AT )) -le "$MAX_AGE" ]; then
     NEXT=$(round_at "$(python3 -c "print($ID + 1)")" || true)
     if [ -z "$NEXT" ] || [ "$NEXT" -gt "$EXPIRY" ]; then ROUND=$ID; break; fi
   fi
@@ -55,8 +58,9 @@ done
 if [ -z "$ROUND" ]; then
   AT=$(( EXPIRY - PRICE_AGE ))
   echo "no qualifying round — publishing \$$(echo "scale=2; $PRICE/100000000" | bc) dated $AT"
+  : "${FEED_KEEPER_KEY:?export FEED_KEEPER_KEY, the key that owns the feed}"
   cast send "$FEED" "pushRoundAt(int256,uint256)" "$PRICE" "$AT" \
-    --rpc-url "$RPC" --private-key "$PRIVATE_KEY" >/dev/null
+    --rpc-url "$RPC" --private-key "$FEED_KEEPER_KEY" >/dev/null
   ROUND=$(cast call "$FEED" "latestRound()(uint80)" --rpc-url "$RPC" | awk '{print $1}')
 fi
 echo "round   $ROUND"

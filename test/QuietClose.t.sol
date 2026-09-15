@@ -5,6 +5,8 @@ import {BaseTest} from "./Base.t.sol";
 import {AarkaSeries} from "../src/AarkaSeries.sol";
 import {AarkaFactory} from "../src/AarkaFactory.sol";
 import {AarkaToken} from "../src/AarkaToken.sol";
+import {PlainToken} from "./mocks/MockStockToken.sol";
+import {AggregatorV3Interface} from "../src/interfaces/IExternal.sol";
 
 /// @notice AUDIT-16 and AUDIT-17, fixed.
 ///
@@ -132,5 +134,18 @@ contract QuietCloseTest is BaseTest {
     function test_AUDIT17_subCentStrikesAreRefused() public {
         vm.expectRevert(AarkaFactory.InvalidStrike.selector);
         factory.createSeries(address(nvda), 212_00_000_001, EXPIRY);
+    }
+
+    /// @notice A stock token without ERC-8056 is not gated on corporate actions at settlement,
+    ///         exactly as the factory does not gate it at creation.
+    function test_AUDIT16_aTokenWithoutErc8056SettlesNormally() public {
+        PlainToken plain = new PlainToken("Plain", "PLN");
+        AarkaSeries s = new AarkaSeries(
+            plain, AggregatorV3Interface(address(feed)), AggregatorV3Interface(address(seq)), STRIKE, EXPIRY
+        );
+        feed.pushRound(200, 250e8, EXPIRY - 3 hours);
+        vm.warp(EXPIRY + 1);
+        s.settle(200);
+        assertFalse(s.settledLate());
     }
 }
