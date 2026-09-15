@@ -351,11 +351,11 @@ interface IAarkaToken is IERC20 {
 Naming follows the Pendle convention, which the market already reads:
 
 ```
-symbol   fNVDA-26SEP          uNVDA-26SEP
-name     Aarka Floor NVDA 26SEP26 $200    Aarka Upside NVDA 26SEP26 $200
+symbol   fNVDA-200-26SEP26                uNVDA-200-26SEP26
+name     Aarka Floor NVDA 26SEP26 $200.00  Aarka Upside NVDA 26SEP26 $200.00
 ```
 
-The strike goes in `name()` rather than `symbol()`. Symbols must stay short enough to render in a DEX interface; the strike is the thing a user must not get wrong, so it goes where there is room to spell it out.
+The strike is in both. An earlier version kept it out of `symbol()` to keep symbols short, and on testnet that gave the $210 and $230 floor tokens the same symbol, `fNVDA-30OCT26`. Wallets and token lists show the symbol, and the strike is the one term a user must not get wrong, so it goes there too (AUDIT-17). A whole-dollar strike renders without cents, `fNVDA-212.50-26SEP26` otherwise, and the factory refuses sub-cent strikes so no two series can render the same.
 
 The `f` and `u` prefixes are deliberate. The `m` prefix was rejected because Mirror Protocol's `mAAPL` and `mTSLA` are the direct subject of an SEC enforcement action, and inheriting that association would be an unforced error for a product built on tokenized equities.
 
@@ -402,7 +402,9 @@ This is safe because of the conservation result in [§2](#2-the-payoff-proven). 
 
 The consequence is the protocol's escape hatch, and it costs nothing to provide:
 
-> **If the oracle is permanently broken, or settlement never happens, no funds are stuck.** Anyone holding both halves withdraws their stock token at any time. Anyone holding one half buys the other on the AMM and withdraws. No admin, no timelock, no emergency multisig, no governance vote.
+> **If the oracle is permanently broken, no funds are stuck.** Anyone holding both halves withdraws their stock token at any time. No admin, no timelock, no emergency multisig, no governance vote.
+
+That covers pairs. It does **not** cover someone holding one half, who can only get out by buying the other on an AMM that may be empty. For them the guarantee is that settlement always eventually happens — see [§8.4](#84-if-settlement-never-happens). An earlier version of this section treated `redeem()` as the whole escape hatch, and that is how the six-hour settlement window's stranding risk went unnoticed (AUDIT-16).
 
 There is no `pause()` on a series and no privileged withdrawal. That is not an oversight; it is the reason none is needed.
 
@@ -582,10 +584,12 @@ The settlement round must then satisfy:
 
 ```solidity
 require(updatedAt <= expiry, "round is after expiry");
-require(expiry - updatedAt <= MAX_SETTLEMENT_LOOKBACK, "round too far before expiry");
+require(expiry - updatedAt <= MAX_SETTLEMENT_AGE, "round too far before expiry");
 ```
 
-`MAX_SETTLEMENT_LOOKBACK` is **6 hours**, and the value is now empirical rather than assumed. A regular US session runs 09:30 to 16:00 ET, so a six-hour bound guarantees the settlement round was published **during the same trading session** as the close it settles against.
+> **Superseded, 15 September 2026.** The bound below was 6 hours. It is now **26 hours**, `MAX_SETTLEMENT_AGE`, with a late path after 7 days. The six-hour reasoning is kept because it explains the mistake. Robinhood Chain's equity feeds publish on a **0.5% deviation or a 24-hour heartbeat**, so a calm session produces no rounds at all. SPY's last round before the 11 September close was 7.1 hours old, so a SPY series expiring that day could never have settled, and a holder of one half had no way out. The 111-round sample below was one ticker in an earnings week, which is exactly the bias this section warned about. Until the next round, the last price is within 0.5% of the market by the feed's own definition, so a heartbeat-old round is accurate; the pause the six-hour bound used to detect by silence is now checked directly, together with any ERC-8056 action that landed after the round. See [§8.1](#81-pinning-the-round) and AUDIT-16.
+
+`MAX_SETTLEMENT_LOOKBACK` was **6 hours**, and the value was empirical rather than assumed. A regular US session runs 09:30 to 16:00 ET, so a six-hour bound guarantees the settlement round was published **during the same trading session** as the close it settles against.
 
 Measured against 111 consecutive live rounds of the NVDA feed ([Appendix A.2](#a2-measured-round-cadence-nvda)):
 
@@ -632,8 +636,14 @@ function settle(uint80 roundId) external {
     (uint256 S, uint256 updatedAt) = _readRound(roundId);
 
     require(updatedAt <= expiry,                             "round after expiry");
-    require(expiry - updatedAt <= MAX_SETTLEMENT_LOOKBACK,   "round too old");
     _requireIsLastRoundAtOrBefore(roundId, expiry);
+
+    // Normal path. A week after expiry these stop applying, so every series resolves.
+    if (block.timestamp < expiry + LATE_SETTLEMENT_DELAY) {
+        require(expiry - updatedAt <= MAX_SETTLEMENT_AGE,    "round too old");   // 26 hours
+        require(!corporateActionBetween(updatedAt, expiry),  "action after round");
+        // plus the sequencer and oraclePaused checks above
+    }
 
     settlementPrice      = S;
     settlementUpdatedAt  = updatedAt;
@@ -700,7 +710,9 @@ A `paid` of zero is legal and does not revert — an upside token that finished 
 
 ### 8.4 If settlement never happens
 
-Nothing breaks. `redeem()` stays open forever ([§5.4](#54-redeem-is-permanent)). The failure mode of the entire oracle stack is "the split does not resolve and everyone gets their share back," which requires no intervention from anyone.
+It always does. The normal path needs a round within 26 hours of expiry, the sequencer up, the asset unpaused and no corporate action after the round. When one of those fails, it keeps failing for at most `LATE_SETTLEMENT_DELAY` (7 days). After that, settlement accepts the last round at or before expiry at any age and ignores the sequencer and the pause; it still pins the round and still requires 8 decimals, because a mis-scaled price is not late, it is wrong. The series records `settledLate` so the path taken is visible on chain.
+
+The earlier answer here was "`redeem()` stays open, so nothing is stuck." That was true for pairs and false for the people the product is for — someone who split a share and sold one half. A late price is a worse price. No price, for them, is a total loss (AUDIT-16).
 
 ---
 
@@ -1019,7 +1031,7 @@ Everything below must be resolved before mainnet. Each is a blocking item, not a
 | 4 | **Testnet has neither feeds nor stock tokens** | a testnet deployment needs mock aggregators and mock tokens | **CONFIRMED EMPTY.** The NVDA feed and the NVDA token both have zero bytecode on chain 46630. Uniswap v4's PoolManager *is* there, at the mainnet address, so Module 2 can still be demonstrated on testnet |
 | 5 | **`TransferWithUIAmount` vs `TransferWithScaledUI`** | cosmetic for the contracts, load-bearing for a subgraph | **STILL OPEN.** Neither topic hash appears in NVDA's recent logs, so this could not be settled by observation. Read the verified ABI from Blockscout |
 | 6 | ~~Exact `oraclePaused()` signature~~ | — | **RESOLVED.** `oraclePaused()` returns cleanly on all 11 tokens, so the selector is right and the probe is live rather than silently skipped |
-| 7 | **Feed round cadence during a quiet session** | validates `MAX_SETTLEMENT_LOOKBACK = 6 hours` empirically | **PARTIALLY RESOLVED.** Measured on NVDA over 111 rounds: worst intra-session gap 2.63 h, so 6 h holds with 2.3x headroom ([Appendix A.2](#a2-measured-round-cadence-nvda)). The sample week contained an earnings print, so re-run on a calm week and a low-volatility ticker before mainnet |
+| 7 | **Feed round cadence during a quiet session** | validated the old `MAX_SETTLEMENT_LOOKBACK = 6 hours` | **RESOLVED, and it disproved the bound.** SPY went 7.1 h without a round before the 11 Sep 2026 close. Replaced by a 26-hour age plus a late path (AUDIT-16). Original note: Measured on NVDA over 111 rounds: worst intra-session gap 2.63 h, so 6 h holds with 2.3x headroom ([Appendix A.2](#a2-measured-round-cadence-nvda)). The sample week contained an earnings print, so re-run on a calm week and a low-volatility ticker before mainnet |
 | 8 | **NYSE calendar for the first year of expiries** | [§5.5](#55-expirycalendar) needs concrete timestamps, DST-correct | generate from the published NYSE holiday calendar; unit-test both DST transitions |
 | 9 | ~~v4-periphery `HookMiner`~~ | — | **RESOLVED.** Available at `v4-periphery/test/shared/HookMiner.sol`. Note there is no `BaseHook` in this version, so the hook implements `IHooks` directly |
 

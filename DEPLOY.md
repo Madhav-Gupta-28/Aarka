@@ -69,26 +69,36 @@ has to ask for anything to try the protocol.
 
 ### Live testnet deployment
 
-Deployed 2026-08-29, redeployed after the security review in [`AUDIT.md`](./AUDIT.md). Refreshed
-2026-09-15: TSLA added, twelve new series opened, and the parity hook moved to a series that runs
-past the end of October.
+First deployed 2026-08-29 and redeployed after each security review in [`AUDIT.md`](./AUDIT.md).
+The current set dates from 2026-09-15 and carries the AUDIT-16 settlement fix and the AUDIT-17
+symbol fix; both live in `AarkaSeries` bytecode, so they needed a new factory.
 
 | Contract | Address |
 | --- | --- |
-| `AarkaFactory` | `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0` |
-| `AarkaLens` | `0xB3cAcd3770D0474d5aD8ba83D68A31C78E94adb2` |
+| `AarkaFactory` | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
+| `AarkaLens` | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
+| `AarkaRouter` | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
+| `AarkaParityHook` | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` — NVDA $210 · 30 OCT 26, threshold 100 bps |
 | `HookLens` | `0x414326E556667b5AE9931F67cDb267D1BAF7D1D0` |
 | `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |
-| `AarkaParityHook` | `0x8524C561D2Ac10095775c6C2F6172a0DF8490040` — NVDA $210 · 30 OCT 26 |
 | `TestStockToken` (NVDA) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
-| `TestAggregator` (RHNVDA/USD) | `0x6a985039287dC8BB054C36804eb75337f69f944F` |
+| `TestAggregator` (RHNVDA/USD) | `0x6a985039287dC8BB054C36804eb75337f69f944F` — owned by the feed keeper |
 | `TestStockToken` (TSLA) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
-| `TestAggregator` (RHTSLA/USD) | `0x883dA473862A33e32BCdfb5Cf0aA22b0571781Ab` |
+| `TestAggregator` (RHTSLA/USD) | `0x883dA473862A33e32BCdfb5Cf0aA22b0571781Ab` — owned by the feed keeper |
 | `TestUSDG` | `0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097` |
-| liquidity router | `0x8DdC22F32FC605f1c32c6571F7E21c66675a0039` |
-| swap router | `0x83b5D54866A826426f4E413b668B587c052Ab824` |
+| liquidity router (hook pools) | `0xfcE4Fc96069E44fcCc934dD298D67F1f218c4756` |
 
-Series addresses are listed in [`TESTING.md`](./TESTING.md).
+Series addresses are listed in [`TESTING.md`](./TESTING.md). The previous factory,
+`0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0`, still holds the three settled September series.
+
+### Redeploying
+
+```sh
+forge script script/Redeploy.s.sol --rpc-url robinhood_testnet --broadcast --private-key $PRIVATE_KEY
+```
+
+New factory, lens and router against the existing calendar, stand-in tokens, feeds and quote asset;
+registers both stocks and opens twelve series. Then hook one series with `DeployHook.runLive` below.
 
 ### Keeping the feeds live
 
@@ -100,8 +110,16 @@ PRIVATE_KEY=... LOOP=1800 ./script/mirror-feeds.sh   # every 30 minutes
 Copies the latest round from each real Robinhood Chain Chainlink feed onto its testnet stand-in,
 price and timestamp both, and only when mainnet has published something newer. Without it the
 feeds go stale, `createSeries` refuses a price older than four days, and nothing can settle.
-`.github/workflows/mirror-feeds.yml` runs it every 30 minutes once the `TESTNET_FEED_KEY` secret is
-set to the key that owns the stand-in feeds.
+`.github/workflows/mirror-feeds.yml` runs it every 30 minutes with the `TESTNET_FEED_KEY` secret.
+
+That key owns the two stand-in feeds and nothing else (AUDIT-20). The deployer, which owns the
+factory, calendar and hook, never goes into CI. Locally the keeper key is `FEED_KEEPER_KEY` in
+`.env`:
+
+```sh
+set -a && source .env && set +a
+PRIVATE_KEY=$FEED_KEEPER_KEY ./script/mirror-feeds.sh
+```
 
 ### Opening more series
 
@@ -113,7 +131,7 @@ forge script script/OpenSeries.s.sol --rpc-url robinhood_testnet --broadcast \
 ### Settling
 
 ```sh
-PRIVATE_KEY=... ./script/settle-series.sh <SERIES> <PRICE_8DP>
+PRIVATE_KEY=... FEED_KEEPER_KEY=... ./script/settle-series.sh <SERIES> <PRICE_8DP>
 ```
 
 Settles against a qualifying round if the feed already has one, and otherwise publishes one dated

@@ -14,28 +14,39 @@ Explorer        https://explorer.testnet.chain.robinhood.com
 
 ## Contracts
 
+Redeployed on 15 September 2026 with the settlement and symbol fixes from the second review.
+
 | | |
 | --- | --- |
-| AarkaFactory | `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0` |
-| AarkaLens | `0xB3cAcd3770D0474d5aD8ba83D68A31C78E94adb2` |
-| AarkaParityHook | `0x8524C561D2Ac10095775c6C2F6172a0DF8490040` (NVDA $210 · 30 OCT 26) |
+| AarkaFactory | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
+| AarkaLens | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
+| AarkaRouter | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
+| AarkaParityHook | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` (NVDA $210 · 30 OCT 26) |
 | NVDA (stand-in) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | TSLA (stand-in) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
 | USDG (stand-in) | `0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097` |
 
 The NVDA and TSLA feeds mirror the real Robinhood Chain Chainlink feeds — same price, same
-timestamp — through `script/mirror-feeds.sh`.
+timestamp — through `script/mirror-feeds.sh`, run every 30 minutes by CI.
 
-Live series, two strikes on each stock for three expiries:
+Live series, two strikes on each stock for three expiries. Symbols carry the strike:
+`fNVDA-210-30OCT26`.
 
 | Series | 25 SEP 26 | 02 OCT 26 | 30 OCT 26 |
 | --- | --- | --- | --- |
-| NVDA $210 | `0x2349bEBe3D24fc86bAFcAED8fDFb4528EB9d6981` | `0x258D5559290e7C541Ff9f33dff249aF0a2B3E219` | `0xdB04d1652e2556b459cb57BB15fB1D95689c993b` |
-| NVDA $230 | `0x09fBefDF2d0Cc3e32eBEA691a6324119a87Ef805` | `0x3f60Cd8a14E5eFf3029C11Fa32Db3CaFcC4AaE01` | `0x6E1Ac75F4B4abF4c56bf3aaD69aAdb6263833B2f` |
-| TSLA $350 | `0x32c44090D2d82fE1eFbF8c997Ff4d3A435a26fc9` | `0xa068372F4467be213Cf6550f62E3186888824f8f` | `0x0aC9BC5012f830Ab2D53c147b06b9416E98C89f9` |
-| TSLA $400 | `0x5a63Da1A0776Ff959bC5E04057dd3381077341ef` | `0xAa7CbdCe8ba7Cb2D3958E70106CcaB89c3204f27` | `0x1ec5Daf722D07D0B7F9Fcd0a956bEC957B852479` |
+| NVDA $210 | `0xdFb1aCFAa87EAf10136242C3f273fE4CEA606Ac7` | `0xcE14497468dfcfBA0dfad442Af8561d2f956e4E7` | `0x7D31f372d747EDB24dB9242d5e48Cf68aA8dBdcF` |
+| NVDA $230 | `0xBc25A8F80B30622aaCfeEfa054DC44125C1Cd9E7` | `0x81105a4a2d74cB353655469C815F55D392CEabb7` | `0x13b5eA7EEAFCfabeF731A97F4410E5Db941A4819` |
+| TSLA $350 | `0x46A335B9611D6e542F7Dc6339097c90B7804881a` | `0xCC0DDe80Ce590e2092F00cf5b82016ffd17163F4` | `0xA34968Cdb62a753Aff8b3E172a931e1c76706E3e` |
+| TSLA $400 | `0x2b51ed3125Cf98262B1C9BF075B81371315C29aF` | `0xcB18e35Ec23b9595ca8752d5FfEa09Cffd5e1a87` | `0x9F755706Bf8d5cdCe4BAe8e96E0d7B4942536F89` |
 
-Settled, against the real Chainlink NVDA price at each close:
+NVDA $210 · 30 OCT is the series with a market: pools for both halves, the parity hook, and the
+router's one-transaction trades.
+
+### Previous deployment
+
+The first deployment (factory `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0`) is still on chain.
+Three of its series ran their whole life and settled against the real Chainlink NVDA price at each
+close:
 
 | Series | Address | Close | Floor / upside |
 | --- | --- | --- | --- |
@@ -75,7 +86,18 @@ up by 100.
 halves drop by 40. This works at any time, including after expiry and after settlement — which is
 why the protocol needs no admin and no emergency exit.
 
-**5 — Try to break it.** Send some `uNVDA` to another address, then try to recombine. It refuses:
+**5 — Sell the upside for cash.** Open NVDA $210 · 30 OCT. In the *Sell upside* panel enter `10`,
+approve once, then press *Keep the floor, sell the upside*. One transaction: your NVDA goes in, you
+keep 10 `fNVDA-210-30OCT26`, and the upside is sold for USDG. The quote comes from simulating the
+exact trade just before you sign, and the transaction reverts if the price moves more than 0.5%.
+
+**6 — Buy the upside.** Press *Get 100,000 USDG*, then *Buy upside* with `500`. You pay USDG for
+everything NVDA earns above $210 by expiry, with nothing to borrow and nothing to liquidate.
+
+**7 — Break parity.** Scroll to *The two halves have to add up* and buy $50k of the floor. The swap
+opens a gap against the stock, and the hook closes it before the transaction returns.
+
+**8 — Try to break it.** Send some `uNVDA` to another address, then try to recombine. It refuses:
 recombining needs one of each, and the panel caps you at the smaller balance.
 
 ## What is real and what is a stand-in

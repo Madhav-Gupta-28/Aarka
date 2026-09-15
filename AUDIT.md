@@ -296,13 +296,14 @@ proof-of-concept tests before anything was written about them.
 
 | # | Severity | Issue | Status |
 | --- | --- | --- | --- |
-| 16 | **High** | A series with no feed round in the six hours before expiry can never settle, and a holder of only one half then has no way out | **Open — needs a contract change** |
-| 17 | **Medium** | Token symbols do not include the strike, so two series on the same expiry share a symbol | Open — needs a contract change |
+| 16 | **High** | A series with no feed round in the six hours before expiry can never settle, and a holder of only one half then has no way out | Fixed and redeployed |
+| 17 | **Medium** | Token symbols do not include the strike, so two series on the same expiry share a symbol | Fixed and redeployed |
 | 18 | **Medium** | Wallet writes on the site were not pinned to Robinhood Chain | Fixed |
-| 19 | Low | The site reads `allSeries`, which the lens itself says not to use past a small deployment | Open |
-| 20 | Low | The feed mirror would run with the key that owns the factory, calendar and both feeds | Open — decide before enabling it |
+| 19 | Low | The site reads `allSeries`, which the lens itself says not to use past a small deployment | Fixed |
+| 20 | Low | The feed mirror would run with the key that owns the factory, calendar and both feeds | Fixed |
 | 21 | Low | The "max" button broke on any balance of 1,000 or more | Fixed |
 | 22 | Low | The README and this document overstated test coverage and the escape hatch | Fixed |
+| 23 | Low | The hook's 30 bps threshold sat below the ~90 bps its three pool fees cost, so it spent gas on arbs that could never clear | Fixed by parameter |
 | — | Info | Two economic attacks on the hook were measured and neither pays | Recorded in `test/hook/EconomicAudit.t.sol` |
 
 ---
@@ -345,9 +346,13 @@ case, and add a last-resort path: if a series is still unsettled some days after
 settlement against the first round published *after* expiry. A slightly late price is far better
 than no price for someone holding one half.
 
-Not fixed here, because every deployed series carries the constant in its bytecode. It needs a new
-`AarkaSeries`, a new factory and a redeploy, and should land before any series is written on SPY,
-QQQ or another low-volatility asset.
+**Fixed.** `MAX_SETTLEMENT_AGE` is 26 hours: the 24-hour heartbeat plus two hours of margin.
+`oraclePaused()` is still checked at settlement, and a new check refuses the normal path when an
+ERC-8056 action took effect after the settlement round and at or before expiry. After
+`LATE_SETTLEMENT_DELAY` (7 days) only the round pinning and the feed's 8 decimals still apply, and
+the series records `settledLate`. Every series now resolves. Tests: `test/QuietClose.t.sol`, and
+`test_AUDIT16_theRealSpyCloseOnElevenSeptemberSettles` in `test/Fork.t.sol`, which settles the real
+SPY round on a mainnet fork. Shipped in a new factory; the old series are untouched.
 
 ---
 
@@ -361,8 +366,8 @@ can pick the wrong strike, and anyone can create a same-expiry series to sit nex
 Separately, `name()` renders the strike to the cent, so two strikes differing by less than a cent
 produce byte-identical names **and** symbols.
 
-**Recommended.** Put the strike in the symbol (`fNVDA-210-30OCT26`) and require strikes to be whole
-cents in `createSeries`. Needs a redeploy, so it belongs in the same release as AUDIT-16.
+**Fixed.** Symbols are now `fNVDA-210-30OCT26`, or `fNVDA-212.50-30OCT26` for a strike with cents,
+and `createSeries` refuses a strike that is not a whole number of cents. Same release as AUDIT-16.
 
 ---
 
@@ -386,7 +391,8 @@ permissionless, so anyone can grow the list until the page's single read no long
 series this is nowhere near the limit. It becomes a one-transaction-per-series way to take the page
 down on mainnet.
 
-**Recommended.** Page with `seriesPage`, and list only open and claimable series.
+**Fixed.** The lens gained `positionsPage`, and the site reads series and positions 25 at a time.
+Settled series with nothing left to claim drop off the board.
 
 ---
 
@@ -397,8 +403,8 @@ deployer, which also owns the factory, the calendar and the hook. Putting it in 
 the blast radius of that secret to the whole testnet deployment: a leak could publish any price and
 settle any series against it.
 
-**Recommended.** Transfer ownership of the two `TestAggregator` feeds to a fresh key used only by the
-mirror, and store that one. Testnet only; on mainnet the feeds are Chainlink's.
+**Fixed.** Both feeds were transferred to a new key that owns nothing else, and only that key is
+stored as the `TESTNET_FEED_KEY` CI secret. The first scheduled run read both mainnet feeds with it.
 
 ---
 
@@ -436,10 +442,37 @@ triggering pool at that moment. Across three position sizes and ranges, the JIT 
 to the flow it absorbed than it earned from the donation (−24 to −1,686 USDG). Not ruled out against
 mostly uninformed flow, so donating to the trigger pool is still worth revisiting.
 
+---
+
+### AUDIT-23 · Low · The hook tried arbs it could never profit from
+
+Found while proving the redeployed hook through the router. A 1,500 share sale opened a 64 bps gap,
+above the 30 bps `minDeviationBps`, so the hook ran its solver and swaps. Closing that gap costs a
+0.3% fee in each of three pools, about 90 bps, so the profit check failed and the arb reverted
+inside its `try/catch`. Correctly, but after spending roughly 285,000 gas of the trader's.
+
+**Fixed by parameter.** `setParams(100, 100_000e18)` on the live hook. A 4,000 share sale then
+opened a wider gap, and the hook redeemed 52.76 NVDA of halves, paid 41.74 USDG to LPs and closed it
+to 0 bps. The threshold belongs above the combined fee of the three pools it trades.
+
+---
+
+### Also added in response to this review
+
+**`AarkaRouter`.** The site called Uniswap's `PoolSwapTest`, a test contract, and nothing let a user
+do what the headline says. The router splits and sells one half in a single transaction, or buys a
+half with cash, with a caller-set minimum output. It holds nothing between calls, pulls only from
+`msg.sender`, accepts only factory-created series, and its unlock callback is reachable only from
+the PoolManager. Eleven tests, including that the parity hook still reacts to trades made through
+it. Checked on chain: 10 NVDA in, floor kept, 133.21 USDG out, router holding zero afterwards.
+
+**`HookLens` tests**, closing the 0% coverage gap from AUDIT-22.
+
 ## Verification, 15 September
 
 ```
-152 unit, fuzz and invariant tests + 6 fork tests against Robinhood Chain mainnet, all passing
-forge lint: 0 errors; 9 unsafe-typecast warnings, each read and each guarded by a preceding check
+178 unit, fuzz and invariant tests + 7 fork tests against Robinhood Chain mainnet, all passing
+coverage: 99.3% lines, 97.6% statements, 85.8% branches, 98.9% functions across src/
+forge lint: 0 errors; typecast warnings each guarded by a preceding check
 no private key in git history; .env never committed
 ```
