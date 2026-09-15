@@ -33,7 +33,7 @@ halves and withdraw.
 ## Tests
 
 ```
-forge test                                        # 82 tests
+forge test                                        # 149 tests
 forge test --match-path test/Fork.t.sol --fork-url robinhood   # against the live Chainlink feed
 forge coverage --no-match-coverage "test|script"
 ```

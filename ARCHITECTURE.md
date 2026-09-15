@@ -730,9 +730,9 @@ Front ends should surface `series.feed()` and let a user confirm it against Chai
 
 ## 10. User flows
 
-### 10.1 The holder who wants downside protection
+### 10.1 The holder who wants cash for the upside
 
-Owns 100 NVDA tokens at $215. Wants to keep the stock but not the drawdown.
+Owns 100 NVDA tokens at $215. Does not expect it to go far past $230, and would rather be paid for that part today.
 
 ```
 1. mint(100)                  -> 100 fNVDA-26SEP  +  100 uNVDA-26SEP
@@ -741,6 +741,8 @@ Owns 100 NVDA tokens at $215. Wants to keep the stock but not the drawdown.
 ```
 
 They now hold a position worth `min(S, K)` at expiry plus cash received up front. They have sold the upside above $230 and been paid for it immediately. Nothing can be liquidated, and there is no margin to maintain.
+
+What this is not: downside protection. The floor half takes every dollar of a fall exactly as the stock would. The only cushion is the cash received for the upside. In options terms this is a covered call, and it should never be described as a hedge.
 
 This is the flow that makes the protocol bootstrap **single-sided**. The user needs no counterparty, no order book, and no capital beyond the shares they already owned. They are not depositing to earn a fee; they are restructuring a position they already have and taking cash for the part they did not want.
 
