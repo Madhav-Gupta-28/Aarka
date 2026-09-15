@@ -36,8 +36,8 @@ contract AarkaLensTest is BaseTest {
         assertEq(v.underlyingSymbol, "NVDA");
         assertEq(v.strike, STRIKE);
         assertEq(v.expiry, EXPIRY);
-        assertEq(v.floorSymbol, "fNVDA-25SEP26");
-        assertEq(v.upsideSymbol, "uNVDA-25SEP26");
+        assertEq(v.floorSymbol, "fNVDA-230-25SEP26");
+        assertEq(v.upsideSymbol, "uNVDA-230-25SEP26");
         assertEq(v.spotPrice, 215e8);
         assertTrue(v.priceValid);
         assertFalse(v.oraclePaused);
@@ -186,5 +186,18 @@ contract AarkaLensTest is BaseTest {
     function test_oraclePausedIsSurfaced() public {
         nvda.setOraclePaused(true);
         assertTrue(lens.view_(address(series)).oraclePaused);
+    }
+
+    /// @notice AUDIT-19. The bounded read the site now uses instead of positionsOf.
+    function test_positionsPageMatchesTheUnboundedRead() public {
+        vm.prank(alice);
+        series.mint(10e18, alice);
+        AarkaLens.PositionView[] memory all = lens.positionsOf(alice);
+        AarkaLens.PositionView[] memory page = lens.positionsPage(alice, 0, 50);
+        assertEq(page.length, all.length);
+        assertEq(page[0].floorBalance, all[0].floorBalance);
+        assertEq(page[0].series, all[0].series);
+        assertEq(lens.positionsPage(alice, all.length, 10).length, 0, "past the end is empty, not a revert");
+        assertEq(lens.positionsPage(alice, 0, 1).length, 1);
     }
 }

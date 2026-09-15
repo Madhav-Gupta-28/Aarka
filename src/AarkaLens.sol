@@ -165,6 +165,23 @@ contract AarkaLens {
         }
     }
 
+    /// @notice One holder's position in a page of series. The bounded form of `positionsOf`, for
+    ///         the same reason `seriesPage` exists: anyone can grow the series list.
+    function positionsPage(address holder, uint256 offset, uint256 limit)
+        external
+        view
+        returns (PositionView[] memory out)
+    {
+        uint256 n = factory.seriesCount();
+        if (offset >= n) return new PositionView[](0);
+        uint256 end = offset + limit;
+        if (end > n) end = n;
+        out = new PositionView[](end - offset);
+        for (uint256 i = offset; i < end; ++i) {
+            out[i - offset] = positionIn(holder, factory.allSeries(i));
+        }
+    }
+
     function positionIn(address holder, address s) public view returns (PositionView memory p) {
         AarkaSeries series = AarkaSeries(s);
         IERC20 underlying = series.underlying();
