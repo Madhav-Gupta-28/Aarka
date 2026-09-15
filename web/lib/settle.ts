@@ -10,8 +10,11 @@ const AGG_ABI = [
 
 export type Candidate = {roundId: bigint; price: bigint; updatedAt: bigint};
 
-/** Mirrors AarkaSeries: 6 hours, so the round comes from the same trading session as the close. */
-export const MAX_LOOKBACK_SECONDS = 6n * 60n * 60n;
+/** Mirrors AarkaSeries.MAX_SETTLEMENT_AGE: the feeds' 24-hour heartbeat plus two hours. */
+export const MAX_LOOKBACK_SECONDS = 26n * 60n * 60n;
+
+/** Mirrors AarkaSeries.LATE_SETTLEMENT_DELAY: after this, any age is accepted. */
+export const LATE_SETTLEMENT_DELAY = 7n * 24n * 60n * 60n;
 
 type Row = {price: bigint; updatedAt: bigint};
 
@@ -31,7 +34,7 @@ async function readRound(feed: `0x${string}`, id: bigint): Promise<Row | null> {
  * Find the round `settle()` will accept, applying the same three rules the contract does:
  *
  *   1. published at or before expiry
- *   2. no more than six hours before expiry
+ *   2. no more than 26 hours before expiry, unless the series is a week past expiry
  *   3. the next round id is either missing or published after expiry
  *
  * An earlier version returned the first round at or before expiry while walking back from the
@@ -67,7 +70,8 @@ export async function findSettlementRound(
     misses = 0;
 
     if (row.updatedAt > expiry) continue;
-    if (expiry - row.updatedAt > MAX_LOOKBACK_SECONDS) {
+    const late = BigInt(Math.floor(Date.now() / 1000)) >= expiry + LATE_SETTLEMENT_DELAY;
+    if (!late && expiry - row.updatedAt > MAX_LOOKBACK_SECONDS) {
       // With rounds in time order everything further back is older still. Once a valid round
       // has been found there is nothing left to improve on.
       if (best) break;

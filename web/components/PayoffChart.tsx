@@ -78,7 +78,7 @@ export function PayoffChart({strike, spot, underlyingSymbol, settlementPrice, he
 
         {/* axes */}
         <line x1={pad.l} y1={pad.t + ih} x2={pad.l + iw} y2={pad.t + ih} className="axis" />
-        {ticks.map((t) => (
+        {ticks.filter((t) => marker === undefined || Math.abs(t - marker) > xMax * 0.08).map((t) => (
           <text key={t} x={x(t)} y={height - 12} className="tick" textAnchor="middle">
             ${t.toFixed(0)}
           </text>

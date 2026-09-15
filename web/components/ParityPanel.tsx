@@ -1,10 +1,10 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {useAccount, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
+import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import {maxUint256} from "viem";
 import {publicClient} from "@/lib/client";
-import {ADDRESSES, HOOK_LENS_ABI, TOKEN_ABI} from "@/lib/contracts";
+import {ADDRESSES, HOOK_LENS_ABI, ROUTER_ABI, TOKEN_ABI, hookedPoolKey} from "@/lib/contracts";
 import {robinhoodTestnet} from "@/lib/chain";
 
 type Parity = {
@@ -15,21 +15,9 @@ type Parity = {
 
 const q = (v: bigint) => `$${(Number(v) / 1e6).toFixed(2)}`;
 
-const SWAP_ABI = [
-  {type: "function", name: "swap", stateMutability: "payable",
-   inputs: [
-     {name: "key", type: "tuple", components: [
-       {name: "currency0", type: "address"}, {name: "currency1", type: "address"},
-       {name: "fee", type: "uint24"}, {name: "tickSpacing", type: "int24"},
-       {name: "hooks", type: "address"}]},
-     {name: "params", type: "tuple", components: [
-       {name: "zeroForOne", type: "bool"}, {name: "amountSpecified", type: "int256"},
-       {name: "sqrtPriceLimitX96", type: "uint160"}]},
-     {name: "testSettings", type: "tuple", components: [
-       {name: "takeClaims", type: "bool"}, {name: "settleUsingBurn", type: "bool"}]},
-     {name: "hookData", type: "bytes"}],
-   outputs: [{type: "int256"}]},
-] as const;
+/** $50k: big enough to open a gap wider than the hook's threshold on these testnet pools. */
+const BUY_USDG = 50_000_000_000n;
+const SELL_HALVES = 250_000_000_000_000_000_000n;
 
 /**
  * The three pools the hook watches, and a button that breaks parity on purpose.
@@ -50,6 +38,14 @@ export function ParityPanel({
   const {address, isConnected} = useAccount();
   const [p, setP] = useState<Parity | null>(null);
   const [phase, setPhase] = useState<string>("idle");
+  const {data: usdgBal} = useReadContract({
+    address: ADDRESSES.usdg as `0x${string}`, abi: TOKEN_ABI, functionName: "balanceOf",
+    args: address ? [address] : undefined, query: {enabled: !!address, refetchInterval: 8000},
+  });
+  const {data: halfBal} = useReadContract({
+    address: half === "floor" ? floorToken : upsideToken, abi: TOKEN_ABI, functionName: "balanceOf",
+    args: address ? [address] : undefined, query: {enabled: !!address, refetchInterval: 8000},
+  });
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
 
@@ -81,40 +77,35 @@ export function ParityPanel({
   const quote = p.quote;
   const asset = half === "floor" ? floorToken : upsideToken;
   const assetSymbol = half === "floor" ? floorSymbol : upsideSymbol;
-  const assetIsZero = asset.toLowerCase() < quote.toLowerCase();
-
-  const MIN = 4295128740n;
-  const MAX = 1461446703485210103287273052203988822378723970341n;
-
-  const key = assetIsZero
-    ? {currency0: asset, currency1: quote, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`}
-    : {currency0: quote, currency1: asset, fee: 3000, tickSpacing: 60, hooks: ADDRESSES.hook as `0x${string}`};
+  const {key, assetIsZero} = hookedPoolKey(asset);
+  const router = ADDRESSES.router as `0x${string}`;
 
   function approve(token: `0x${string}`, label: string) {
     setPhase(label);
     writeContract({address: token, abi: TOKEN_ABI, functionName: "approve",
-                   args: [ADDRESSES.swapRouter as `0x${string}`, maxUint256], chainId: robinhoodTestnet.id});
+                   args: [router, maxUint256], chainId: robinhoodTestnet.id});
   }
 
   /**
    * Buying a half pushes its price up, so the two halves become dear against the stock and the
    * hook mints to close the gap. Selling pushes it down, the halves go cheap, and the hook
    * redeems instead. Both directions of the arb exist; showing only one hides half the mechanism.
+   *
+   * No minimum output on purpose: the point is to move the price far enough to open a gap.
    */
   function swap(dir: "buy" | "sell") {
     setPhase(dir === "buy" ? "buying" : "selling");
-    // exact-input: spend quote to receive the asset, or spend the asset to receive quote
     const zeroForOne = dir === "buy" ? !assetIsZero : assetIsZero;
-    const amountSpecified = dir === "buy" ? -50_000_000_000n : -250_000_000_000_000_000_000n;
+    const amountIn = dir === "buy" ? BUY_USDG : sellAmount;
     writeContract({
-      address: ADDRESSES.swapRouter as `0x${string}`, abi: SWAP_ABI, functionName: "swap",
-      args: [key, {zeroForOne, amountSpecified, sqrtPriceLimitX96: zeroForOne ? MIN : MAX},
-             {takeClaims: false, settleUsingBurn: false}, "0x"],
-      chainId: robinhoodTestnet.id,
+      address: router, abi: ROUTER_ABI, functionName: "swapExactIn",
+      args: [key, zeroForOne, amountIn, 0n, address!], chainId: robinhoodTestnet.id,
     });
   }
 
   const busy = isPending || mining;
+  const sellAmount = (halfBal ?? 0n) < SELL_HALVES ? (halfBal ?? 0n) : SELL_HALVES;
+  const canBuy = (usdgBal ?? 0n) >= BUY_USDG;
   const atParity = p.gapBps < p.minDeviationBps;
 
   return (
@@ -165,11 +156,13 @@ export function ParityPanel({
           </div>
 
           <div className="parityBtns" style={{marginTop: 10}}>
-            <button className="btn primary" onClick={() => swap("buy")} disabled={busy}>
-              {phase === "buying" && busy ? "Buying…" : `Buy $50k of ${assetSymbol}`}
+            <button className="btn primary" onClick={() => swap("buy")} disabled={busy || !canBuy}>
+              {phase === "buying" && busy ? "Buying…" : canBuy ? `Buy $50k of ${assetSymbol}` : "Needs 50,000 USDG"}
             </button>
-            <button className="btn primary" onClick={() => swap("sell")} disabled={busy}>
-              {phase === "selling" && busy ? "Selling…" : `Sell 250 ${assetSymbol}`}
+            <button className="btn primary" onClick={() => swap("sell")} disabled={busy || sellAmount === 0n}>
+              {phase === "selling" && busy ? "Selling…"
+                : sellAmount === 0n ? `No ${assetSymbol} to sell`
+                  : `Sell ${(Number(sellAmount) / 1e18).toLocaleString("en-US", {maximumFractionDigits: 2})} ${assetSymbol}`}
             </button>
           </div>
         </>
@@ -180,8 +173,8 @@ export function ParityPanel({
         become dear against the stock and the hook <b style={{color: "var(--paper)"}}>mints</b> to
         close the gap. <b style={{color: "var(--paper)"}}>Selling</b> pushes it down, the halves go
         cheap, and the hook <b style={{color: "var(--paper)"}}>redeems</b> instead. Either way the
-        gap you see afterwards is what survived the hook, not what the swap created — approve first,
-        selling needs a balance of that half.
+        gap you see afterwards is what survived the hook, not what the swap created. Mint test USDG
+        above to buy; split a share to have halves to sell.
       </p>
     </div>
   );

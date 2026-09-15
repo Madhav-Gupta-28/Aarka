@@ -3,7 +3,7 @@
 import {useEffect, useState} from "react";
 import {useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import {SERIES_ABI} from "@/lib/contracts";
-import {findSettlementRound, MAX_LOOKBACK_SECONDS, type Candidate} from "@/lib/settle";
+import {findSettlementRound, LATE_SETTLEMENT_DELAY, MAX_LOOKBACK_SECONDS, type Candidate} from "@/lib/settle";
 import {usd} from "@/lib/format";
 import {robinhoodTestnet} from "@/lib/chain";
 import type {SeriesView} from "./SeriesCard";
@@ -33,16 +33,17 @@ export function Settle({s, onDone}: {s: SeriesView; onDone?: () => void}) {
       <div className="settleBox">
         <b>Not settleable yet</b>
         <p>
-          No feed round exists in the six hours before expiry. That is the guard working — while a
-          feed is not publishing there is no price to settle against, and a stale one would be
-          worse than waiting. Recombining still works, so nothing is stuck.
+          No feed round in the 26 hours before expiry, which means the feed missed its daily
+          heartbeat. A week after expiry any earlier round is accepted instead, so this series will
+          still settle. Recombining works in the meantime.
         </p>
       </div>
     );
   }
 
   const age = Number(s.expiry - cand.updatedAt);
-  const tooOld = BigInt(age) > MAX_LOOKBACK_SECONDS;
+  const late = BigInt(Math.floor(Date.now() / 1000)) >= s.expiry + LATE_SETTLEMENT_DELAY;
+  const tooOld = !late && BigInt(age) > MAX_LOOKBACK_SECONDS;
   const busy = isPending || mining;
 
   return (
@@ -53,12 +54,12 @@ export function Settle({s, onDone}: {s: SeriesView; onDone?: () => void}) {
         <div className="row"><span>Price</span><b>{usd(cand.price)}</b></div>
         <div className="row">
           <span>Published before expiry</span>
-          <b>{Math.floor(age / 60)} min</b>
+          <b>{age >= 3600 ? `${Math.floor(age / 3600)}h ${Math.floor((age % 3600) / 60)}m` : `${Math.floor(age / 60)} min`}</b>
         </div>
       </div>
       <p>
-        The contract will check this is the last round at or before expiry, that it is inside the
-        six-hour window, and that the feed still reports 8 decimals. Then it fixes the split.
+        The contract will check this is the last round at or before expiry,{" "}
+        {late ? "that the feed still reports 8 decimals — the series is a week past expiry, so age no longer counts" : "that it is at most 26 hours old, and that the asset is not paused"}. Then it fixes the split.
       </p>
       <button
         className="btn primary full"

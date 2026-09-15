@@ -1,28 +1,27 @@
 "use client";
 
-import {useAccount, useReadContract} from "wagmi";
-import {ADDRESSES, LENS_ABI, STATUS_LABEL} from "@/lib/contracts";
+import {useEffect, useState} from "react";
+import {useAccount} from "wagmi";
+import {STATUS_LABEL} from "@/lib/contracts";
+import {readPositions, type Position} from "@/lib/lens";
 import {units, usd} from "@/lib/format";
 import type {SeriesView} from "./SeriesCard";
 
-type Position = {
-  series: `0x${string}`;
-  underlyingBalance: bigint; underlyingAllowance: bigint;
-  floorBalance: bigint; upsideBalance: bigint;
-  redeemable: bigint; floorClaimable: bigint; upsideClaimable: bigint;
-};
-
-/** Everything the connected wallet holds, across every series, in one call. */
+/** Everything the connected wallet holds, read a page of series at a time. */
 export function Positions({series}: {series: SeriesView[]}) {
   const {address, isConnected} = useAccount();
-  const {data} = useReadContract({
-    address: ADDRESSES.lens as `0x${string}`, abi: LENS_ABI, functionName: "positionsOf",
-    args: address ? [address] : undefined,
-    query: {enabled: !!address, refetchInterval: 12_000},
-  });
+  const [rows, setRows] = useState<Position[]>([]);
+
+  useEffect(() => {
+    if (!address) { setRows([]); return; }
+    let live = true;
+    const load = () => readPositions(address).then((r) => { if (live) setRows(r); }).catch(() => {});
+    load();
+    const t = setInterval(load, 12_000);
+    return () => { live = false; clearInterval(t); };
+  }, [address]);
 
   if (!isConnected) return null;
-  const rows = (data as unknown as Position[] | undefined) ?? [];
   const held = rows.filter((p) => p.floorBalance > 0n || p.upsideBalance > 0n);
   if (held.length === 0) return null;
 
@@ -35,7 +34,7 @@ export function Positions({series}: {series: SeriesView[]}) {
 
       <div className="posTable">
         {held.map((p) => {
-          const s = series.find((x) => x.series === p.series);
+          const s = series.find((x) => x.series.toLowerCase() === p.series.toLowerCase());
           if (!s) return null;
           const settled = s.settled;
           return (

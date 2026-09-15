@@ -1,8 +1,8 @@
 "use client";
 
 import {useCallback, useEffect, useState} from "react";
-import {publicClient} from "@/lib/client";
-import {ADDRESSES, LENS_ABI} from "@/lib/contracts";
+import {ADDRESSES} from "@/lib/contracts";
+import {readSeries, isFinished} from "@/lib/lens";
 import {robinhoodTestnet} from "@/lib/chain";
 import {PayoffChart} from "@/components/PayoffChart";
 import {SeriesCard, type SeriesView} from "@/components/SeriesCard";
@@ -11,7 +11,8 @@ import {Connect} from "@/components/Connect";
 import {Split} from "@/components/Split";
 import {Claim} from "@/components/Claim";
 import {Settle} from "@/components/Settle";
-import {Faucet} from "@/components/Faucet";
+import {Faucet, UsdgFaucet} from "@/components/Faucet";
+import {Trade} from "@/components/Trade";
 import {Positions} from "@/components/Positions";
 import {Indicative} from "@/components/Indicative";
 import {ParityPanel} from "@/components/ParityPanel";
@@ -23,10 +24,9 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const rows = (await publicClient.readContract({
-        address: ADDRESSES.lens as `0x${string}`, abi: LENS_ABI, functionName: "allSeries",
-      })) as unknown as SeriesView[];
-      setSeries([...rows]);
+      // Paged, and without series that are settled and fully claimed: nothing is left in those.
+      const rows = await readSeries();
+      setSeries(rows.filter((r) => !isFinished(r)));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "could not reach the chain");
@@ -53,7 +53,8 @@ export default function Home() {
     return live.length ? live[0].i : 0;
   })();
   const s = series?.[active ?? defaultIndex];
-  const hooked = series?.find((r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase());
+  const hookedIndex = series?.findIndex((r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase()) ?? -1;
+  const hooked = hookedIndex >= 0 ? series?.[hookedIndex] : undefined;
   const expired = s ? s.status !== 0 : false;
 
   return (
@@ -98,9 +99,13 @@ export default function Home() {
               />
               <Indicative s={s} />
               <Faucet symbol={s.underlyingSymbol} token={s.underlying} />
+              <UsdgFaucet />
             </div>
 
-            <div>
+            <div className="stack">
+              {!expired && (
+                <Trade s={s} onPickMarket={hookedIndex >= 0 ? () => setActive(hookedIndex) : undefined} />
+              )}
               {s.settled ? <Claim s={s} /> : <Split s={s} />}
               {expired && !s.settled && <Settle s={s} onDone={load} />}
             </div>
@@ -133,9 +138,11 @@ export default function Home() {
       )}
 
       <p className="note">
-        Deployed to Robinhood Chain testnet. The stock token and the price feed are stand-ins,
-        because testnet carries neither — everything else is the real protocol.{" "}
+        Deployed to Robinhood Chain testnet. The stock tokens are stand-ins, because testnet has
+        none; their price feeds carry the real Chainlink prices from Robinhood Chain mainnet.
+        Everything else is the real protocol.{" "}
         <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.factory}`}>Factory</a>{" "}
+        · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.router}`}>Router</a>{" "}
         · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.hook}`}>Parity hook</a>
       </p>
     </div>

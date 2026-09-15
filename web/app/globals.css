@@ -319,3 +319,9 @@ header {
 
 /* Long addresses and symbols must never push the page sideways. */
 .half, .lrow b, .claimRow b, .posCells b { overflow-wrap: anywhere; }
+
+/* ---------- trade ---------- */
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.tradePanel { border-color: var(--ochre-dim); }
+.tradePanel .balances b { white-space: nowrap; }
+.faucet + .faucet { margin-top: 10px; }
