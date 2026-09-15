@@ -1,9 +1,10 @@
 "use client";
 
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
-import {parseUnits, maxUint256} from "viem";
-import {ADDRESSES, SERIES_ABI, TOKEN_ABI} from "@/lib/contracts";
+import {formatUnits, parseUnits, maxUint256} from "viem";
+import {SERIES_ABI, TOKEN_ABI} from "@/lib/contracts";
+import {robinhoodTestnet} from "@/lib/chain";
 import {units} from "@/lib/format";
 import type {SeriesView} from "./SeriesCard";
 
@@ -39,9 +40,10 @@ export function Split({s}: {s: SeriesView}) {
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
 
-  if (isSuccess) {
+  useEffect(() => {
+    if (!isSuccess) return;
     refetchBal(); refetchAllow(); refetchF(); refetchU(); reset();
-  }
+  }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   let wei = 0n;
   try { wei = parseUnits(amount || "0", 18); } catch {}
@@ -57,14 +59,14 @@ export function Split({s}: {s: SeriesView}) {
     if (mode === "mint") {
       if (needsApproval) {
         writeContract({address: s.underlying, abi: TOKEN_ABI, functionName: "approve",
-                       args: [s.series, maxUint256]});
+                       args: [s.series, maxUint256], chainId: robinhoodTestnet.id});
       } else {
         writeContract({address: s.series, abi: SERIES_ABI, functionName: "mint",
-                       args: [wei, address!]});
+                       args: [wei, address!], chainId: robinhoodTestnet.id});
       }
     } else {
       writeContract({address: s.series, abi: SERIES_ABI, functionName: "redeem",
-                     args: [wei, address!]});
+                     args: [wei, address!], chainId: robinhoodTestnet.id});
     }
   }
 
@@ -96,7 +98,7 @@ export function Split({s}: {s: SeriesView}) {
           aria-label="Amount"
         />
         <span className="sym">{mode === "mint" ? s.underlyingSymbol : "pairs"}</span>
-        <button className="maxBtn" onClick={() => setAmount(units(max, 4))}>max</button>
+        <button className="maxBtn" onClick={() => setAmount(formatUnits(max, 18))}>max</button>
       </div>
 
       <div className="balances">

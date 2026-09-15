@@ -1,8 +1,9 @@
 "use client";
 
+import {useEffect} from "react";
 import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import {TOKEN_ABI} from "@/lib/contracts";
-import {FAUCET_URL} from "@/lib/chain";
+import {FAUCET_URL, robinhoodTestnet} from "@/lib/chain";
 
 /**
  * Anyone can mint themselves the test stock a series is written on, once an hour, with no
@@ -17,7 +18,9 @@ export function Faucet({symbol, token}: {symbol: string; token: `0x${string}`}) 
   });
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
-  if (isSuccess) { refetch(); reset(); }
+  useEffect(() => {
+    if (isSuccess) { refetch(); reset(); }
+  }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const now = Math.floor(Date.now() / 1000);
   const readyAt = last ? Number(last) + 3600 : 0;
@@ -37,7 +40,8 @@ export function Faucet({symbol, token}: {symbol: string; token: `0x${string}`}) 
       <button
         className="btn"
         disabled={!isConnected || busy || waiting}
-        onClick={() => writeContract({address: token, abi: TOKEN_ABI, functionName: "claim"})}
+        onClick={() => writeContract({address: token, abi: TOKEN_ABI, functionName: "claim",
+                                      chainId: robinhoodTestnet.id})}
       >
         {!isConnected ? "Connect first" : busy ? "Claiming…" : waiting ? `Again in ${mins}m` : `Claim 100 ${symbol}`}
       </button>

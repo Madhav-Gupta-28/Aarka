@@ -5,6 +5,7 @@ import {useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import {SERIES_ABI} from "@/lib/contracts";
 import {findSettlementRound, MAX_LOOKBACK_SECONDS, type Candidate} from "@/lib/settle";
 import {usd} from "@/lib/format";
+import {robinhoodTestnet} from "@/lib/chain";
 import type {SeriesView} from "./SeriesCard";
 
 /**
@@ -64,7 +65,7 @@ export function Settle({s, onDone}: {s: SeriesView; onDone?: () => void}) {
         disabled={busy || tooOld}
         onClick={() =>
           writeContract({address: s.series, abi: SERIES_ABI, functionName: "settle",
-                         args: [cand.roundId]})}
+                         args: [cand.roundId], chainId: robinhoodTestnet.id})}
       >
         {tooOld ? "Round is outside the window" : busy ? "Settling…" : "Settle this series"}
       </button>

@@ -1,7 +1,9 @@
 "use client";
 
+import {useEffect} from "react";
 import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import {SERIES_ABI, TOKEN_ABI} from "@/lib/contracts";
+import {robinhoodTestnet} from "@/lib/chain";
 import {units, usd, pct} from "@/lib/format";
 import type {SeriesView} from "./SeriesCard";
 
@@ -18,7 +20,9 @@ export function Claim({s}: {s: SeriesView}) {
   });
   const {writeContract, data: hash, isPending, reset} = useWriteContract();
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
-  if (isSuccess) { rf(); ru(); reset(); }
+  useEffect(() => {
+    if (isSuccess) { rf(); ru(); reset(); }
+  }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const locked = s.status === 2;
   const unlockIn = Math.max(0, Number(s.claimsUnlockAt) - Math.floor(Date.now() / 1000));
@@ -54,7 +58,8 @@ export function Claim({s}: {s: SeriesView}) {
           className="btn"
           disabled={!isConnected || busy || locked || !fBal}
           onClick={() => writeContract({address: s.series, abi: SERIES_ABI,
-                                        functionName: "claimFloor", args: [fBal!, address!]})}
+                                        functionName: "claimFloor", args: [fBal!, address!],
+                                        chainId: robinhoodTestnet.id})}
         >
           Claim floor
         </button>
@@ -70,7 +75,8 @@ export function Claim({s}: {s: SeriesView}) {
           className="btn"
           disabled={!isConnected || busy || locked || !uBal}
           onClick={() => writeContract({address: s.series, abi: SERIES_ABI,
-                                        functionName: "claimUpside", args: [uBal!, address!]})}
+                                        functionName: "claimUpside", args: [uBal!, address!],
+                                        chainId: robinhoodTestnet.id})}
         >
           Claim upside
         </button>

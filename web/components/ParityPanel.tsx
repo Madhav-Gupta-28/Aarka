@@ -5,6 +5,7 @@ import {useAccount, useWaitForTransactionReceipt, useWriteContract} from "wagmi"
 import {maxUint256} from "viem";
 import {publicClient} from "@/lib/client";
 import {ADDRESSES, HOOK_LENS_ABI, TOKEN_ABI} from "@/lib/contracts";
+import {robinhoodTestnet} from "@/lib/chain";
 
 type Parity = {
   underlyingPrice: bigint; floorPrice: bigint; upsidePrice: bigint; sumOfHalves: bigint;
@@ -92,7 +93,7 @@ export function ParityPanel({
   function approve(token: `0x${string}`, label: string) {
     setPhase(label);
     writeContract({address: token, abi: TOKEN_ABI, functionName: "approve",
-                   args: [ADDRESSES.swapRouter as `0x${string}`, maxUint256]});
+                   args: [ADDRESSES.swapRouter as `0x${string}`, maxUint256], chainId: robinhoodTestnet.id});
   }
 
   /**
@@ -109,6 +110,7 @@ export function ParityPanel({
       address: ADDRESSES.swapRouter as `0x${string}`, abi: SWAP_ABI, functionName: "swap",
       args: [key, {zeroForOne, amountSpecified, sqrtPriceLimitX96: zeroForOne ? MIN : MAX},
              {takeClaims: false, settleUsingBurn: false}, "0x"],
+      chainId: robinhoodTestnet.id,
     });
   }
 
