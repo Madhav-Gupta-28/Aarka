@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback, useEffect, useState} from "react";
-import {ADDRESSES} from "@/lib/contracts";
+import {ADDRESSES, marketFor} from "@/lib/contracts";
 import {readSeries, isFinished} from "@/lib/lens";
 import {robinhoodTestnet} from "@/lib/chain";
 import {PayoffChart} from "@/components/PayoffChart";
@@ -44,7 +44,7 @@ export default function Home() {
   const defaultIndex = (() => {
     if (!series?.length) return 0;
     const hooked = series.findIndex(
-      (r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase() && r.status === 0);
+      (r) => r.series.toLowerCase() === ADDRESSES.flagshipSeries.toLowerCase() && r.status === 0);
     if (hooked >= 0) return hooked;
     const live = series
       .map((r, i) => ({r, i}))
@@ -53,8 +53,11 @@ export default function Home() {
     return live.length ? live[0].i : 0;
   })();
   const s = series?.[active ?? defaultIndex];
-  const hookedIndex = series?.findIndex((r) => r.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase()) ?? -1;
-  const hooked = hookedIndex >= 0 ? series?.[hookedIndex] : undefined;
+  // The parity panel follows the selected series when it has a market, else the flagship.
+  const hookedIndex = series?.findIndex((r) => r.status === 0 && !!marketFor(r.series)) ?? -1;
+  const hooked = s && marketFor(s.series) ? s
+    : series?.find((r) => r.series.toLowerCase() === ADDRESSES.flagshipSeries.toLowerCase());
+  const hookedMarket = hooked ? marketFor(hooked.series) : undefined;
   const expired = s ? s.status !== 0 : false;
 
   return (
@@ -128,8 +131,10 @@ export default function Home() {
       </div>
 
       {series && <Positions series={series} />}
-      {hooked && (
+      {hooked && hookedMarket && (
         <ParityPanel
+          key={hookedMarket}
+          hook={hookedMarket}
           floorToken={hooked.floorToken}
           upsideToken={hooked.upsideToken}
           floorSymbol={hooked.floorSymbol}
@@ -143,7 +148,7 @@ export default function Home() {
         Everything else is the real protocol.{" "}
         <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.factory}`}>Factory</a>{" "}
         · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.router}`}>Router</a>{" "}
-        · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.hook}`}>Parity hook</a>
+        {hookedMarket && <>· <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${hookedMarket}`}>Parity hook</a></>}
       </p>
     </div>
   );

@@ -29,8 +29,9 @@ const SELL_HALVES = 250_000_000_000_000_000_000n;
 type Half = "floor" | "upside";
 
 export function ParityPanel({
-  floorToken, upsideToken, floorSymbol, upsideSymbol,
+  hook, floorToken, upsideToken, floorSymbol, upsideSymbol,
 }: {
+  hook: `0x${string}`;
   floorToken: `0x${string}`; upsideToken: `0x${string}`;
   floorSymbol: string; upsideSymbol: string;
 }) {
@@ -53,17 +54,18 @@ export function ParityPanel({
     try {
       const r = (await publicClient.readContract({
         address: ADDRESSES.hookLens as `0x${string}`, abi: HOOK_LENS_ABI,
-        functionName: "parity", args: [ADDRESSES.hook as `0x${string}`],
+        functionName: "parity", args: [hook],
       })) as unknown as Parity;
       setP(r);
     } catch { /* leave the last good reading up */ }
   }
 
   useEffect(() => {
+    setP(null);
     load();
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
-  }, []);
+  }, [hook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isSuccess) return;
@@ -77,7 +79,7 @@ export function ParityPanel({
   const quote = p.quote;
   const asset = half === "floor" ? floorToken : upsideToken;
   const assetSymbol = half === "floor" ? floorSymbol : upsideSymbol;
-  const {key, assetIsZero} = hookedPoolKey(asset);
+  const {key, assetIsZero} = hookedPoolKey(asset, hook);
   const router = ADDRESSES.router as `0x${string}`;
 
   function approve(token: `0x${string}`, label: string) {

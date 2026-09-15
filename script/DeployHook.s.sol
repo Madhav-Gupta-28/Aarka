@@ -170,7 +170,9 @@ contract DeployHook is Script {
         manager.initialize(upsideKey, _sqrtPrice(upsideKey, upsideToken, pUpside));
 
         hook.wire(underlyingKey, floorKey, upsideKey);
-        hook.setParams(30, 100_000e18);
+        // 100 bps: above the ~90 bps the three pool fees cost, so the hook only acts on gaps it can
+        // actually close at a profit (AUDIT-23).
+        hook.setParams(100, 100_000e18);
     }
 
     function _seed(address deployer, address nvdaAddr) private {

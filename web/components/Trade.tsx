@@ -5,7 +5,7 @@ import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContr
 import {formatUnits, maxUint256, parseUnits} from "viem";
 import {publicClient} from "@/lib/client";
 import {robinhoodTestnet} from "@/lib/chain";
-import {ADDRESSES, HOOK_LENS_ABI, ROUTER_ABI, TOKEN_ABI, hookedPoolKey} from "@/lib/contracts";
+import {ADDRESSES, HOOK_LENS_ABI, ROUTER_ABI, TOKEN_ABI, hookedPoolKey, marketFor} from "@/lib/contracts";
 import {units} from "@/lib/format";
 import type {SeriesView} from "./SeriesCard";
 
@@ -33,7 +33,8 @@ export function Trade({s, onPickMarket}: {s: SeriesView; onPickMarket?: () => vo
   const [error, setError] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
 
-  const hasMarket = s.series.toLowerCase() === ADDRESSES.hookSeries.toLowerCase();
+  const hook = marketFor(s.series);
+  const hasMarket = !!hook;
   const buying = mode === "buyUpside";
   const payToken = (buying ? ADDRESSES.usdg : s.underlying) as `0x${string}`;
   const payDecimals = buying ? 6 : 18;
@@ -52,13 +53,14 @@ export function Trade({s, onPickMarket}: {s: SeriesView; onPickMarket?: () => vo
   const {isLoading: mining, isSuccess} = useWaitForTransactionReceipt({hash});
 
   useEffect(() => {
+    setPrice(null);
     if (!hasMarket) return;
     let live = true;
     const load = async () => {
       try {
         const p = (await publicClient.readContract({
           address: ADDRESSES.hookLens as `0x${string}`, abi: HOOK_LENS_ABI, functionName: "parity",
-          args: [ADDRESSES.hook as `0x${string}`],
+          args: [hook!],
         })) as unknown as {floorPrice: bigint; upsidePrice: bigint};
         if (live) setPrice({floor: p.floorPrice, upside: p.upsidePrice});
       } catch { /* keep the last reading */ }
@@ -66,7 +68,7 @@ export function Trade({s, onPickMarket}: {s: SeriesView; onPickMarket?: () => vo
     load();
     const t = setInterval(load, 10_000);
     return () => { live = false; clearInterval(t); };
-  }, [hasMarket]);
+  }, [hasMarket, hook]);
 
   useEffect(() => {
     if (!isSuccess) return;
@@ -78,10 +80,10 @@ export function Trade({s, onPickMarket}: {s: SeriesView; onPickMarket?: () => vo
       <div className="panel tradePanel">
         <b className="panelTitle">No market for this series yet</b>
         <p className="explain">
-          On testnet one series has pools for its halves: NVDA $210, expiring 30 Oct. You can still
+          Nobody has opened pools for these halves, so they cannot be traded here. You can still
           split this one and hold both halves, or recombine them.
         </p>
-        {onPickMarket && <button className="btn" onClick={onPickMarket}>Open NVDA $210 · 30 Oct</button>}
+        {onPickMarket && <button className="btn" onClick={onPickMarket}>Open a series with a market</button>}
       </div>
     );
   }
@@ -101,7 +103,7 @@ export function Trade({s, onPickMarket}: {s: SeriesView; onPickMarket?: () => vo
       : (wei * px / 10n ** 18n) * (10_000n - FEE_BPS) / 10_000n;
 
   const soldToken = mode === "sellFloor" ? s.floorToken : s.upsideToken;
-  const {key, assetIsZero} = hookedPoolKey(buying ? s.upsideToken : soldToken);
+  const {key, assetIsZero} = hookedPoolKey(buying ? s.upsideToken : soldToken, hook);
 
   async function go() {
     setError(null);

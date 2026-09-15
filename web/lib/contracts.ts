@@ -9,9 +9,8 @@ export const ADDRESSES = {
   lens: "0xaE4f737b0f259b1C8A15a73367670090c94bB2d7",
   router: "0xe7C93E5b953a98F1601D469bFb30eE6f687c678a",
   calendar: "0x111040a3CfA607EF19693A023b157e9f806C622b",
-  hook: "0x553f8d548b85b078152A6901fA19bEa19D8a0040",
-  /** The series with a market: NVDA $210, 30 Oct 2026, the one the parity hook arbitrages. */
-  hookSeries: "0x7D31f372d747EDB24dB9242d5e48Cf68aA8dBdcF",
+  /** Where a first visit lands: NVDA $210, 30 Oct 2026, the longest-dated NVDA market. */
+  flagshipSeries: "0x7D31f372d747EDB24dB9242d5e48Cf68aA8dBdcF",
   nvda: "0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1",
   feed: "0x6a985039287dC8BB054C36804eb75337f69f944F",
   tsla: "0x06002571803D40bD20C13Bd835BE30a642623dEA",
@@ -20,6 +19,27 @@ export const ADDRESSES = {
   hookLens: "0x414326E556667b5AE9931F67cDb267D1BAF7D1D0",
   poolManager: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
 } as const;
+
+/**
+ * Every series with a market, and the parity hook bound to it. A hook is bound to one series at
+ * construction, so each market is its own hook plus a pool for each half. Keys are lowercase.
+ */
+export const MARKETS: Record<string, `0x${string}`> = {
+  "0xdfb1acfaa87eaf10136242c3f273fe4cea606ac7": "0x533f1ee34100eFF09031D3d5DE802d290dBc0040", // NVDA $210 · 25 Sep
+  "0xbc25a8f80b30622aacfeefa054dc44125c1cd9e7": "0x39aC5d768D0Dd32c1Fd133391308aC638A89c040", // NVDA $230 · 25 Sep
+  "0x46a335b9611d6e542f7dc6339097c90b7804881a": "0x6de83EC68484355746F205B9A822785d7e714040", // TSLA $350 · 25 Sep
+  "0x2b51ed3125cf98262b1c9bf075b81371315c29af": "0xce07DfbeE7254c08E773dd7C04a7A7e444B54040", // TSLA $400 · 25 Sep
+  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": "0x7fbd3d2aA2285cee5014bce41584F1A288C94040", // NVDA $210 · 2 Oct
+  "0x81105a4a2d74cb353655469c815f55d392ceabb7": "0x794bb110Bfb78CEeF57d859FfC29103770478040", // NVDA $230 · 2 Oct
+  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": "0x9b11f7704dAd01428d6D477623696b3821E00040", // TSLA $350 · 2 Oct
+  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": "0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040", // TSLA $400 · 2 Oct
+  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": "0x553f8d548b85b078152A6901fA19bEa19D8a0040", // NVDA $210 · 30 Oct
+  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": "0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040", // NVDA $230 · 30 Oct
+  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": "0x578Ed50250440813887Db1723E8bb8d04F804040", // TSLA $350 · 30 Oct
+  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": "0x3B14541fc6D434CA29a0f5575F0881d7974F0040", // TSLA $400 · 30 Oct
+};
+
+export const marketFor = (series: string) => MARKETS[series.toLowerCase()];
 
 /** Every pool Aarka opens uses one fee tier; the hook and HookLens assume it too. */
 export const POOL_FEE = 3000;
@@ -94,15 +114,15 @@ export const ROUTER_ABI = [
    outputs: [{name: "amountOut", type: "uint256"}]},
 ] as const;
 
-/** The pool trading `asset` against USDG, carrying the parity hook. */
-export function hookedPoolKey(asset: `0x${string}`) {
+/** The pool trading `asset` against USDG, carrying that series' parity hook. */
+export function hookedPoolKey(asset: `0x${string}`, hook: `0x${string}`) {
   const quote = ADDRESSES.usdg as `0x${string}`;
   const assetIsZero = asset.toLowerCase() < quote.toLowerCase();
   return {
     key: {
       currency0: assetIsZero ? asset : quote,
       currency1: assetIsZero ? quote : asset,
-      fee: POOL_FEE, tickSpacing: TICK_SPACING, hooks: ADDRESSES.hook as `0x${string}`,
+      fee: POOL_FEE, tickSpacing: TICK_SPACING, hooks: hook,
     },
     assetIsZero,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import {STATUS_LABEL} from "@/lib/contracts";
+import {STATUS_LABEL, marketFor} from "@/lib/contracts";
 import {usd, units, pct, expiryLabel, countdown} from "@/lib/format";
 
 export type SeriesView = {
@@ -51,6 +51,10 @@ export function SeriesCard({s, onSelect}: {s: SeriesView; onSelect?: () => void}
         <div className="row">
           <span>{s.settled ? "Settled at" : "Spot"}</span>
           <b>{s.settled ? usd(s.settlementPrice) : s.priceValid ? usd(s.spotPrice) : "—"}</b>
+        </div>
+        <div className="row">
+          <span>Market</span>
+          <b>{marketFor(s.series) ? "tradable" : "—"}</b>
         </div>
         {s.settled ? (
           <div className="row">
