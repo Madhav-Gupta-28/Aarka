@@ -10,12 +10,34 @@ const AGG_ABI = [
 
 export type Candidate = {roundId: bigint; price: bigint; updatedAt: bigint};
 
+/** Mirrors AarkaSeries: 6 hours, so the round comes from the same trading session as the close. */
+export const MAX_LOOKBACK_SECONDS = 6n * 60n * 60n;
+
+type Row = {price: bigint; updatedAt: bigint};
+
+async function readRound(feed: `0x${string}`, id: bigint): Promise<Row | null> {
+  try {
+    const [, price, , updatedAt] = (await publicClient.readContract({
+      address: feed, abi: AGG_ABI, functionName: "getRoundData", args: [id],
+    })) as unknown as [bigint, bigint, bigint, bigint, bigint];
+    if (updatedAt === 0n || price <= 0n) return null;
+    return {price, updatedAt};
+  } catch {
+    return null; // a phase boundary leaves well-formed ids that do not exist
+  }
+}
+
 /**
- * Find the round `settle()` will accept: the last one published at or before expiry.
+ * Find the round `settle()` will accept, applying the same three rules the contract does:
  *
- * The contract does not read the latest price — the caller names a round and the contract proves
- * it is the right one. So the caller has to find it, which is this. Walking backwards from the
- * latest round is enough: feeds publish in order, and the window we care about is small.
+ *   1. published at or before expiry
+ *   2. no more than six hours before expiry
+ *   3. the next round id is either missing or published after expiry
+ *
+ * An earlier version returned the first round at or before expiry while walking back from the
+ * latest. That assumes rounds are published in time order. Real feeds are, but a round published
+ * out of order made it pick a round the contract rejects, so every rule is now checked here
+ * rather than inferred from the walk.
  */
 export async function findSettlementRound(
   feed: `0x${string}`,
@@ -26,22 +48,36 @@ export async function findSettlementRound(
     address: feed, abi: AGG_ABI, functionName: "latestRoundData",
   })) as unknown as [bigint, bigint, bigint, bigint, bigint];
 
+  const rows = new Map<bigint, Row | null>();
+  const get = async (id: bigint) => {
+    if (!rows.has(id)) rows.set(id, await readRound(feed, id));
+    return rows.get(id)!;
+  };
+
+  let best: Candidate | null = null;
+  let misses = 0;
   for (let i = 0; i < maxLookback; i++) {
     const id = latestId - BigInt(i);
-    let row: readonly [bigint, bigint, bigint, bigint, bigint];
-    try {
-      row = (await publicClient.readContract({
-        address: feed, abi: AGG_ABI, functionName: "getRoundData", args: [id],
-      })) as unknown as [bigint, bigint, bigint, bigint, bigint];
-    } catch {
-      continue; // a phase boundary leaves well-formed ids that do not exist
+    if (id < 0n) break;
+    const row = await get(id);
+    if (!row) {
+      if (++misses > 32) break; // past the start of this phase's history
+      continue;
     }
-    const [, price, , updatedAt] = row;
-    if (updatedAt === 0n || price <= 0n) continue;
-    if (updatedAt <= expiry) return {roundId: id, price, updatedAt};
-  }
-  return null;
-}
+    misses = 0;
 
-/** Mirrors AarkaSeries: 6 hours, so the round comes from the same trading session as the close. */
-export const MAX_LOOKBACK_SECONDS = 6n * 60n * 60n;
+    if (row.updatedAt > expiry) continue;
+    if (expiry - row.updatedAt > MAX_LOOKBACK_SECONDS) {
+      // With rounds in time order everything further back is older still. Once a valid round
+      // has been found there is nothing left to improve on.
+      if (best) break;
+      continue;
+    }
+
+    const next = await get(id + 1n);
+    if (next && next.updatedAt <= expiry) continue; // the contract would say LaterRoundExists
+
+    if (!best || row.updatedAt > best.updatedAt) best = {roundId: id, ...row};
+  }
+  return best;
+}
