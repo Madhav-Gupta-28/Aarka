@@ -78,7 +78,7 @@ symbol fix; both live in `AarkaSeries` bytecode, so they needed a new factory.
 | `AarkaFactory` | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
 | `AarkaLens` | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
 | `AarkaRouter` | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
-| `AarkaParityHook` | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` — NVDA $210 · 30 OCT 26, threshold 100 bps |
+| `AarkaParityHook` × 12 | one per series, threshold 100 bps — listed in [`TESTING.md`](./TESTING.md) |
 | `HookLens` | `0x414326E556667b5AE9931F67cDb267D1BAF7D1D0` |
 | `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |
 | `TestStockToken` (NVDA) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
@@ -90,6 +90,48 @@ symbol fix; both live in `AarkaSeries` bytecode, so they needed a new factory.
 
 Series addresses are listed in [`TESTING.md`](./TESTING.md). The previous factory,
 `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0`, still holds the three settled September series.
+
+### Opening markets
+
+A hook is bound to one series at construction, so every market is its own hook plus a pool for
+each half. `script/open-markets.py` runs `DeployHook.runLive` once per series and opens each pair of
+half pools at a Black-Scholes split of the stock pool's price, so the market starts at parity:
+
+```sh
+python3 script/open-markets.py <NVDA_POOL_PRICE> <TSLA_POOL_PRICE> <SERIES>...
+```
+
+Pass what the stock's own pool trades at rather than the feed price, so markets that already share
+that pool are not moved. Add each new hook to `MARKETS` in `web/lib/contracts.ts`.
+
+### Verifying on the explorer
+
+```sh
+forge build src --use 0.8.33 --out /tmp/out833 --cache-path /tmp/cache833
+forge build src --use 0.8.26 --out /tmp/out826 --cache-path /tmp/cache826
+python3 script/verify-testnet.py
+```
+
+> **The contracts on chain were not built by the compiler in `out/`.** The tests import Uniswap's
+> `PoolManager`, which pins solc 0.8.26, so a plain `forge build` leaves 0.8.26 artifacts. The
+> deploy scripts import only v4's interfaces and test routers, which pin nothing, so every deployed
+> contract — hooks and router included — was built with 0.8.33. Verifying against the 0.8.26 build
+> fails with "Unable to verify" and no hint why. The script compares each address's runtime code
+> against both builds, ignoring immutables, and submits with the compiler that matches.
+
+Series, their tokens and hooks are discovered from the factory and `web/lib/contracts.ts`.
+
+> **"Already verified" does not mean verified.** Blockscout shows source for an address whose
+> bytecode matches a verified one — a twin — without verifying that address, and `forge
+> verify-contract` then skips it as done. The twelve series and twenty-four tokens are twins of each
+> other, so almost all of them would have stayed unverified. The script passes
+> `--skip-is-verified-check` and trusts only the explorer's own `is_verified` flag.
+
+State on 15 September 2026: all 58 contracts of the live deployment verified — factory, lens,
+router, HookLens, calendar, twelve series, twenty-four half tokens, twelve hooks, both stand-in
+stocks, both feeds and USDG. From the first deployment, the three settled series and their six
+tokens are verified too, from the source at commit `6bca1ab`, which matches their bytecode exactly.
+Its factory, lens and hook predate later source changes and are not.
 
 ### Redeploying
 

@@ -69,7 +69,8 @@ so the deploy ships stand-ins for both; Uniswap v4 is already there at its mainn
 ## Status
 
 Live on Robinhood Chain testnet with twelve open series on NVDA and TSLA, priced by the real
-mainnet Chainlink feeds. Reviewed twice; findings and fixes are in [`AUDIT.md`](./AUDIT.md). See
+mainnet Chainlink feeds. Every series has a market — a pool for each half and its own parity hook —
+and all 58 contracts in the live deployment are verified on the explorer. Reviewed twice; findings and fixes are in [`AUDIT.md`](./AUDIT.md). See
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) section 15 for what still stands between this and mainnet.
 
 ## Docs

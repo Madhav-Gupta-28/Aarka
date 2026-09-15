@@ -39,8 +39,26 @@ Live series, two strikes on each stock for three expiries. Symbols carry the str
 | TSLA $350 | `0x46A335B9611D6e542F7Dc6339097c90B7804881a` | `0xCC0DDe80Ce590e2092F00cf5b82016ffd17163F4` | `0xA34968Cdb62a753Aff8b3E172a931e1c76706E3e` |
 | TSLA $400 | `0x2b51ed3125Cf98262B1C9BF075B81371315C29aF` | `0xcB18e35Ec23b9595ca8752d5FfEa09Cffd5e1a87` | `0x9F755706Bf8d5cdCe4BAe8e96E0d7B4942536F89` |
 
-NVDA $210 · 30 OCT is the series with a market: pools for both halves, the parity hook, and the
-router's one-transaction trades.
+Every contract below is verified on the
+[explorer](https://explorer.testnet.chain.robinhood.com), so each address opens to readable source.
+
+Every series has a market: a Uniswap v4 pool for each half against USDG, and its own parity hook.
+Each opened at a Black-Scholes split of its stock's pool price, at exactly 0 bps.
+
+| Market | Parity hook |
+| --- | --- |
+| NVDA $210 · 25 SEP 26 | `0x533f1ee34100eFF09031D3d5DE802d290dBc0040` |
+| NVDA $230 · 25 SEP 26 | `0x39aC5d768D0Dd32c1Fd133391308aC638A89c040` |
+| TSLA $350 · 25 SEP 26 | `0x6de83EC68484355746F205B9A822785d7e714040` |
+| TSLA $400 · 25 SEP 26 | `0xce07DfbeE7254c08E773dd7C04a7A7e444B54040` |
+| NVDA $210 · 02 OCT 26 | `0x7fbd3d2aA2285cee5014bce41584F1A288C94040` |
+| NVDA $230 · 02 OCT 26 | `0x794bb110Bfb78CEeF57d859FfC29103770478040` |
+| TSLA $350 · 02 OCT 26 | `0x9b11f7704dAd01428d6D477623696b3821E00040` |
+| TSLA $400 · 02 OCT 26 | `0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040` |
+| NVDA $210 · 30 OCT 26 | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` |
+| NVDA $230 · 30 OCT 26 | `0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040` |
+| TSLA $350 · 30 OCT 26 | `0x578Ed50250440813887Db1723E8bb8d04F804040` |
+| TSLA $400 · 30 OCT 26 | `0x3B14541fc6D434CA29a0f5575F0881d7974F0040` |
 
 ### Previous deployment
 
@@ -86,7 +104,7 @@ up by 100.
 halves drop by 40. This works at any time, including after expiry and after settlement — which is
 why the protocol needs no admin and no emergency exit.
 
-**5 — Sell the upside for cash.** Open NVDA $210 · 30 OCT. In the *Sell upside* panel enter `10`,
+**5 — Sell the upside for cash.** Open any series. In the *Sell upside* panel enter `10`,
 approve once, then press *Keep the floor, sell the upside*. One transaction: your NVDA goes in, you
 keep 10 `fNVDA-210-30OCT26`, and the upside is sold for USDG. The quote comes from simulating the
 exact trade just before you sign, and the transaction reverts if the price moves more than 0.5%.
