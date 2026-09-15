@@ -1,0 +1,26 @@
+name: Mirror price feeds
+
+# Copies the real Robinhood Chain Chainlink NVDA and TSLA rounds onto the testnet stand-in feeds,
+# so the testnet deployment prices, opens and settles series against the real market.
+# See script/mirror-feeds.sh.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-feeds
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Mirror
+        env:
+          PRIVATE_KEY: ${{ secrets.TESTNET_FEED_KEY }}
+        run: ./script/mirror-feeds.sh
