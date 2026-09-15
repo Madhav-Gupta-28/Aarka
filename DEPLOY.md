@@ -69,25 +69,55 @@ has to ask for anything to try the protocol.
 
 ### Live testnet deployment
 
-Deployed 2026-08-29, **redeployed after the security review** in [`AUDIT.md`](./AUDIT.md). The
-earlier set carried the AUDIT-04 hook vulnerability and is abandoned; these are the live addresses.
+Deployed 2026-08-29, redeployed after the security review in [`AUDIT.md`](./AUDIT.md). Refreshed
+2026-09-15: TSLA added, twelve new series opened, and the parity hook moved to a series that runs
+past the end of October.
 
 | Contract | Address |
 | --- | --- |
 | `AarkaFactory` | `0xE47d91B64f4CcAf9943E6EE1F2b97053722BA0C0` |
-| `AarkaLens` | `0x11d6e43CEBC46F5782Aa943924eAbDe8182A4317` |
+| `AarkaLens` | `0xB3cAcd3770D0474d5aD8ba83D68A31C78E94adb2` |
+| `HookLens` | `0x414326E556667b5AE9931F67cDb267D1BAF7D1D0` |
 | `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |
-| `AarkaParityHook` | `0x9aB510FBf4767eeA1F185Ef611BC717f7eb6c040` |
+| `AarkaParityHook` | `0x8524C561D2Ac10095775c6C2F6172a0DF8490040` — NVDA $210 · 30 OCT 26 |
 | `TestStockToken` (NVDA) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | `TestAggregator` (RHNVDA/USD) | `0x6a985039287dC8BB054C36804eb75337f69f944F` |
-| `TestUSDG` | `0xDF262DeFe539619576a789423c5145D0eDe8d32F` |
-| liquidity router | `0x0722dE2fF7d0587a7809398c57EDea90515D71dF` |
+| `TestStockToken` (TSLA) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
+| `TestAggregator` (RHTSLA/USD) | `0x883dA473862A33e32BCdfb5Cf0aA22b0571781Ab` |
+| `TestUSDG` | `0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097` |
+| liquidity router | `0x8DdC22F32FC605f1c32c6571F7E21c66675a0039` |
 | swap router | `0x83b5D54866A826426f4E413b668B587c052Ab824` |
 
-Series: `$215 / 04SEP26` · `$215 / 11SEP26` `0x39F53AfDa432399EE7973015ED0C9d8a500a11c6` ·
-`$240 / 11SEP26` `0xb4943671814B39Eb221f9d794b2353a6c3978B51`
+Series addresses are listed in [`TESTING.md`](./TESTING.md).
 
-52 expiries published, Sep 2026 to Aug 2027.
+### Keeping the feeds live
+
+```sh
+PRIVATE_KEY=... ./script/mirror-feeds.sh             # once
+PRIVATE_KEY=... LOOP=1800 ./script/mirror-feeds.sh   # every 30 minutes
+```
+
+Copies the latest round from each real Robinhood Chain Chainlink feed onto its testnet stand-in,
+price and timestamp both, and only when mainnet has published something newer. Without it the
+feeds go stale, `createSeries` refuses a price older than four days, and nothing can settle.
+`.github/workflows/mirror-feeds.yml` runs it every 30 minutes once the `TESTNET_FEED_KEY` secret is
+set to the key that owns the stand-in feeds.
+
+### Opening more series
+
+```sh
+forge script script/OpenSeries.s.sol --rpc-url robinhood_testnet --broadcast \
+  --private-key $PRIVATE_KEY --sig "run(int256)" <TSLA_PRICE_8DP>
+```
+
+### Settling
+
+```sh
+PRIVATE_KEY=... ./script/settle-series.sh <SERIES> <PRICE_8DP>
+```
+
+Settles against a qualifying round if the feed already has one, and otherwise publishes one dated
+30 minutes before expiry. With the feeds mirrored that fallback should never be needed.
 
 ## Deploying the parity hook
 
@@ -106,6 +136,18 @@ forge script script/DeployHook.s.sol --rpc-url robinhood_testnet --broadcast \
   --private-key $PRIVATE_KEY --gas-limit 900000000 \
   --sig "run(address,address)" <SERIES> <STOCK_TOKEN>
 ```
+
+To hook a new series onto the existing deployment instead, reusing the quote asset and the stock's
+pool, with the half pools opened at a given split of the stock price:
+
+```sh
+forge script script/DeployHook.s.sol --rpc-url robinhood_testnet --broadcast \
+  --private-key $PRIVATE_KEY --gas-limit 900000000 \
+  --sig "runLive(address,address,address,address,uint256,uint256,uint256)" \
+  <SERIES> <STOCK_TOKEN> <USDG> <SWAP_ROUTER> <P_STOCK> <P_FLOOR> <P_UPSIDE>
+```
+
+Each hook is bound to one series, so this is also how the hook moves on when its series expires.
 
 Deploys `TestUSDG`, mines and deploys the hook, opens the three pools at parity, wires them, and
 seeds liquidity. The `--gas-limit` matters: `HookMiner` searches up to 160k salts and will exhaust
