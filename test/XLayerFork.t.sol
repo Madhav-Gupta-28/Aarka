@@ -23,6 +23,11 @@ import {MockVerifierProxy} from "./StreamsAggregator.t.sol";
 ///      decimals, the supply — is what is actually deployed.
 ///
 ///        forge test --match-path test/XLayerFork.t.sol --fork-url https://rpc.xlayer.tech
+interface IVerifierProxyMeta {
+    function typeAndVersion() external view returns (string memory);
+    function s_feeManager() external view returns (address);
+}
+
 interface IBackedToken {
     function minter() external view returns (address);
     function mint(address to, uint256 amount) external;
@@ -34,6 +39,7 @@ contract XLayerForkTest is Test {
     address constant SEQUENCER_UPTIME = 0x45c2b8C204568A03Dc7A2E32B71D67Fe97F908A9;
     address constant V4_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
     address constant BTC_USD_FEED = 0x4D6f6488a2B3a5f7b088f276887f608a1e9805c4;
+    address constant VERIFIER_PROXY = 0xcE73c8ad08CBDEaCa6078BF0627C8fe0a9a536E7;
 
     bytes32 constant NVDA_REGULAR = bytes32(uint256(0x0b01));
     bytes32 constant NVDA_OVERNIGHT = bytes32(uint256(0x0b03));
@@ -96,6 +102,13 @@ contract XLayerForkTest is Test {
         assertLt(startedAt, block.timestamp - 1 hours, "and up for longer than the grace period");
 
         assertEq(AggregatorV3Interface(BTC_USD_FEED).decimals(), 8, "push feeds exist, just not for equities");
+
+        // The equity price has to come from Data Streams, so the verifier is the load-bearing
+        // dependency. It is deployed, and its fee manager is zero: verification is billed by
+        // subscription, so `verify(payload, "")` carries no value. That is what the adapter does.
+        assertEq(IVerifierProxyMeta(VERIFIER_PROXY).typeAndVersion(), "VerifierProxy 2.0.0");
+        assertEq(IVerifierProxyMeta(VERIFIER_PROXY).s_feeManager(), address(0), "subscription billing");
+        assertGt(VERIFIER_PROXY.code.length, 1000);
 
         console.log("NVDAx supply:", IERC20(NVDAX).totalSupply() / 1e18);
         console.log("sequencer up since:", startedAt);

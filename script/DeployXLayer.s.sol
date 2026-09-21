@@ -27,9 +27,13 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 ///      — is the same audited code that runs on Robinhood Chain.
 ///
 ///        forge script script/DeployXLayer.s.sol --rpc-url xlayer --broadcast \
-///          --private-key $PRIVATE_KEY --sig "run(address)" <DATA_STREAMS_VERIFIER_PROXY>
+///          --private-key $PRIVATE_KEY
 contract DeployXLayer is Script {
     address constant NVDAX = 0xc845b2894dBddd03858fd2D643B4eF725fE0849d;
+
+    /// @notice Chainlink's Data Streams verifier on X Layer: `VerifierProxy 2.0.0`, with a zero
+    ///         fee manager, meaning verification is billed by subscription rather than per report.
+    address constant VERIFIER_PROXY = 0xcE73c8ad08CBDEaCa6078BF0627C8fe0a9a536E7;
     address constant SEQUENCER_UPTIME = 0x45c2b8C204568A03Dc7A2E32B71D67Fe97F908A9;
     IPoolManager constant POOL_MANAGER = IPoolManager(0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32);
 
@@ -44,7 +48,7 @@ contract DeployXLayer is Script {
     uint64 constant NOV27 = 1795813200;
     uint64 constant DEC18 = 1797627600;
 
-    function run(address verifierProxy) external {
+    function run() external {
         vm.startBroadcast();
         address deployer = msg.sender;
 
@@ -53,7 +57,7 @@ contract DeployXLayer is Script {
         streams[1] = NVDA_EXTENDED;
         streams[2] = NVDA_OVERNIGHT;
         StreamsAggregator feed =
-            new StreamsAggregator(IVerifierProxy(verifierProxy), streams, "NVDA / USD - Data Streams");
+            new StreamsAggregator(IVerifierProxy(VERIFIER_PROXY), streams, "NVDA / USD - Data Streams");
 
         ExpiryCalendar calendar = new ExpiryCalendar(deployer);
         uint64[] memory dates = new uint64[](3);
