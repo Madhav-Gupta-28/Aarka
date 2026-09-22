@@ -56,6 +56,11 @@ contract XLayerForkTest is Test {
     ExpiryCalendar calendar;
 
     function setUp() public {
+        // Needs an X Layer fork: the sequencer feed, the verifier proxy and NVDAx are all real
+        // addresses there. Without one, skip rather than fail — Aarka ships on Robinhood Chain and
+        // this suite is kept as the record of what was verified on X Layer.
+        vm.skip(block.chainid != 196);
+
         verifier = new MockVerifierProxy();
 
         bytes32[] memory streams = new bytes32[](2);

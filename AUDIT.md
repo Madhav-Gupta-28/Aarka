@@ -304,6 +304,7 @@ proof-of-concept tests before anything was written about them.
 | 21 | Low | The "max" button broke on any balance of 1,000 or more | Fixed |
 | 22 | Low | The README and this document overstated test coverage and the escape hatch | Fixed |
 | 23 | Low | The hook's 30 bps threshold sat below the ~90 bps its three pool fees cost, so it spent gas on arbs that could never clear | Fixed by parameter |
+| 24 | Low | An arb sized off the curve alone could ask for more tokens than the PoolManager physically holds, so the hook silently did nothing on the largest swaps | Fixed, ships with the next deployment |
 | — | Info | Two economic attacks on the hook were measured and neither pays | Recorded in `test/hook/EconomicAudit.t.sol` |
 
 ---
@@ -454,6 +455,46 @@ inside its `try/catch`. Correctly, but after spending roughly 285,000 gas of the
 **Fixed by parameter.** `setParams(100, 100_000e18)` on the live hook. A 4,000 share sale then
 opened a wider gap, and the hook redeemed 52.76 NVDA of halves, paid 41.74 USDG to LPs and closed it
 to 0 bps. The threshold belongs above the combined fee of the three pools it trades.
+
+### AUDIT-24 · Low · The hook went quiet on the swap that needed it most
+
+Found on 22 September during manual end-to-end testing, by running the parity demo with a
+deliberately oversized sell: 198,652 floor tokens into a pool holding about $1.4m
+([tx `0x205211aa`](https://explorer.testnet.chain.robinhood.com/tx/0x205211aa40f75f5909eb4825df793f37e93970b665f0b3b4ba943546cb7a8817),
+block 122,649,574). The swap succeeded. The hook emitted nothing. The flagship market was left
+**9,555 bps out of parity**.
+
+Uniswap v4 settles a swap's input currency only *after* `afterSwap` returns, so while the hook runs,
+the tokens being sold are still an outstanding debt — the PoolManager does not hold them yet. The
+arb's legs end in a real `take`, which moves real tokens out of the PoolManager's real balance.
+`_solveSize` capped itself against the *curve* — half of what the position virtually holds — and
+asked to take 16,475 floor tokens from a PoolManager holding 7,014. The ERC20 reverted, the
+`try/catch` in `afterSwap` swallowed it, and the trade went through untouched.
+
+The shape of the failure is backwards: a larger swap opens a larger gap, which draws a larger arb,
+which is likelier to outrun the balance. The hook falls silent as the reason to act grows.
+
+**Fixed** by intersecting `_maxOut` with the PoolManager's actual balance of the currency the arb
+must take, so the trade is sized against what is really there rather than what the curve implies.
+
+**What the fix does not do, stated plainly.** Replayed against the same block and the same trade, it
+moves the residue from 9,555 bps to 9,095. It does not repair the pool — repairing it means buying
+an equal quantity of the *upside* half, and that pool is far too shallow to absorb it. That residue
+is a liquidity-depth limit, not a hook defect: no arbitrageur, in that transaction or after it,
+could have done better.
+
+**Why low.** Nothing is lost when it fires — the hook holds no inventory, the user's trade is
+untouched, and the vault's 1:1 identity is unaffected, so the arb remains open to anyone. And it
+takes a single trade that moves a pool by orders of magnitude: at the depth these pools carry, an
+ordinary swap draws an arb of tens of tokens against a balance of thousands. Every trade in the
+manual test run — split, sell upside, buy upside, sell floor, recombine, and a $50k parity demo that
+made the hook mint 206.07 NVDA and pay 1,180.71 USDG to LPs — behaved exactly as quoted.
+
+Two fork tests pin it: one replays the block and asserts the deployed hook did nothing, the other
+etches the fixed hook at the same mined address and asserts it acts. The deployed hooks still carry
+the old sizing; the fix ships with the next deployment.
+
+---
 
 ---
 

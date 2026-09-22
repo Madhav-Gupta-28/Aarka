@@ -320,9 +320,9 @@ contract AarkaParityHook is IHooks, Ownable {
         // which would revert inside SqrtPriceMath rather than returning a price.
         uint256 hi = maxArbSize;
         if (minting) {
-            hi = Math.min(hi, _maxOut(n));
+            hi = Math.min(hi, _maxOut(n, underlyingCurrency));
         } else {
-            hi = Math.min(hi, Math.min(_maxOut(fl), _maxOut(up)));
+            hi = Math.min(hi, Math.min(_maxOut(fl, floorCurrency), _maxOut(up, upsideCurrency)));
         }
         if (hi == 0) return 0;
         if (!_gapOpenAfter(n, fl, up, 1, minting)) return 0; // not even one wei is worth it
@@ -357,13 +357,25 @@ contract AarkaParityHook is IHooks, Ownable {
         return _toPriceX96(next, leg.assetIsZero);
     }
 
-    /// @dev Half the asset a full-range position holds. Half rather than all, because the price
-    ///      goes to infinity as the reserve is drained and the search must stay inside the curve.
-    function _maxOut(Leg memory leg) private pure returns (uint256) {
+    /// @dev The most of `asset` this arb may ask for. Two ceilings, and the tighter one wins.
+    ///
+    ///      The curve: half of what the position virtually holds. Half rather than all, because
+    ///      the price goes to infinity as the reserve is drained and the search must stay inside
+    ///      the curve.
+    ///
+    ///      The balance: v4 settles a swap's input currency only after `afterSwap` returns, so
+    ///      while this runs the tokens the trader is selling are still owed and the PoolManager
+    ///      does not hold them yet. `take` moves real tokens, so an arb sized purely off the curve
+    ///      can ask for more of a currency than is physically there. The ERC20 reverts, the
+    ///      try/catch in `afterSwap` swallows it, and the pools are left mispriced by exactly the
+    ///      swap that should have triggered the correction (AUDIT-24) — the hook going quiet as
+    ///      the swap gets bigger, which is precisely backwards. Sizing against the real balance
+    ///      turns that silent no-op into a smaller arb that still runs.
+    function _maxOut(Leg memory leg, Currency asset) private view returns (uint256) {
         uint256 reserve = leg.assetIsZero
             ? FullMath.mulDiv(leg.liquidity, Q96, leg.sqrtP)
             : FullMath.mulDiv(leg.liquidity, leg.sqrtP, Q96);
-        return reserve / 2;
+        return Math.min(reserve / 2, IERC20(Currency.unwrap(asset)).balanceOf(address(poolManager)));
     }
 
     function _leg(PoolKey memory key, Currency asset) private view returns (Leg memory) {
