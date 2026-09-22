@@ -27,6 +27,25 @@ FEEDS=(
 
 ROUND_SIG='latestRoundData()(uint80,int256,uint256,uint256,uint80)'
 
+# Aarka's stopgap sequencer uptime feed. Chainlink publishes none for Robinhood Chain, so this
+# keeper is what keeps the guard alive. Reporting nothing reads as down, not as up, so a keeper
+# that dies fails closed.
+SEQUENCER_FEED="${SEQUENCER_FEED:-0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303}"
+# A sequencer that has not produced a block in this long is not sequencing.
+MAX_BLOCK_LAG="${MAX_BLOCK_LAG:-600}"
+
+report_sequencer() {
+  # The chain's own clock is the evidence: if the latest block is recent, it is being sequenced.
+  # If the RPC cannot be reached at all, nothing is reported and the feed goes stale on its own.
+  block_time=$(cast block latest --field timestamp --rpc-url "$TESTNET_RPC") || return 0
+  lag=$(( $(date -u +%s) - block_time ))
+  if [ "$lag" -le "$MAX_BLOCK_LAG" ]; then up=true; else up=false; fi
+
+  cast send "$SEQUENCER_FEED" "report(bool)" "$up" \
+    --rpc-url "$TESTNET_RPC" --private-key "$PRIVATE_KEY" >/dev/null
+  echo "$(date -u +%FT%TZ) sequencer up=$up (last block ${lag}s ago)"
+}
+
 mirror_once() {
   for row in "${FEEDS[@]}"; do
     read -r ticker mainnet testnet <<<"$row"
@@ -50,11 +69,16 @@ mirror_once() {
   done
 }
 
+run_once() {
+  mirror_once
+  report_sequencer
+}
+
 if [ -n "${LOOP:-}" ]; then
   while true; do
-    mirror_once || echo "$(date -u +%FT%TZ) run failed, retrying next interval"
+    run_once || echo "$(date -u +%FT%TZ) run failed, retrying next interval"
     sleep "$LOOP"
   done
 else
-  mirror_once
+  run_once
 fi

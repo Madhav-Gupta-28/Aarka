@@ -80,6 +80,7 @@ symbol fix; both live in `AarkaSeries` bytecode, so they needed a new factory.
 | `AarkaRouter` | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
 | `AarkaParityHook` × 12 | one per series, threshold 100 bps — listed in [`TESTING.md`](./TESTING.md) |
 | `HookLens` | `0x414326E556667b5AE9931F67cDb267D1BAF7D1D0` |
+| `AarkaSequencerFeed` | `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` — reported by the keeper, wired via `setSequencerFeed` |
 | `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |
 | `TestStockToken` (NVDA) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | `TestAggregator` (RHNVDA/USD) | `0x6a985039287dC8BB054C36804eb75337f69f944F` — owned by the feed keeper |

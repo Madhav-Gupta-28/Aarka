@@ -476,3 +476,37 @@ coverage: 99.3% lines, 97.6% statements, 85.8% branches, 98.9% functions across 
 forge lint: 0 errors; typecast warnings each guarded by a preceding check
 no private key in git history; .env never committed
 ```
+
+---
+
+### Open item 1, closed as far as it can be — the sequencer guard now runs
+
+Robinhood Chain is an Arbitrum Orbit L2 and its own documentation tells integrators to check a
+Chainlink sequencer uptime feed before trusting a price. Chainlink publishes no such feed for this
+chain. Re-checked on 22 September 2026: **57 feeds, 33 of them equities, no uptime feed.** X Layer
+has one. Robinhood Chain does not.
+
+So the guard has shipped disabled since the first deployment, with every series emitting
+`SequencerCheckDisabled` to say so. `AarkaSequencerFeed` fills the gap: Chainlink's exact interface
+and semantics, written by the same keeper that mirrors the prices, wired in through
+`setSequencerFeed`. Three series created after it — NVDA $210 and $230 and TSLA $350, all 06 NOV 26
+— carry it. The twelve older ones keep the zero address, because a series' feeds are immutable.
+
+**Why a single keeper is acceptable here, stated rather than assumed.** A hostile or broken
+reporter has two moves, and neither is dangerous:
+
+| | |
+| --- | --- |
+| Reports **down** while the chain is up | Settlement reverts — until `LATE_SETTLEMENT_DELAY`, which ignores the sequencer entirely. A week's delay, never stranded funds |
+| Reports **up** while the chain is down | Exactly the status quo, where no feed is wired at all |
+
+It can make settlement stricter or leave it unchanged. It cannot make it looser than today. That
+argument only holds because AUDIT-16 added the late path; before that fix, a stuck reporter would
+have been able to block settlement permanently, and shipping this would have been a bad trade.
+
+**It fails closed.** `latestRoundData` reports down once the last report is older than
+`MAX_REPORT_AGE` (100 minutes, against a 30-minute keeper). A keeper that dies, loses its key or
+cannot reach the chain stops vouching for it rather than silently continuing to.
+
+12 tests cover the feed and what it does to settlement: up, down, a restart holding settlement for
+the grace period, a dead keeper reading as down, and the late path overriding all of it.

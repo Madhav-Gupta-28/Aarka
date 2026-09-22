@@ -22,6 +22,7 @@ Redeployed on 15 September 2026 with the settlement and symbol fixes from the se
 | AarkaLens | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
 | AarkaRouter | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
 | AarkaParityHook | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` (NVDA $210 · 30 OCT 26) |
+| AarkaSequencerFeed | `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` |
 | NVDA (stand-in) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | TSLA (stand-in) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
 | USDG (stand-in) | `0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097` |
