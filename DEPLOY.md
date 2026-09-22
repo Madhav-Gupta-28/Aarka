@@ -78,7 +78,7 @@ symbol fix; both live in `AarkaSeries` bytecode, so they needed a new factory.
 | `AarkaFactory` | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
 | `AarkaLens` | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
 | `AarkaRouter` | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
-| `AarkaParityHook` × 12 | one per series, threshold 100 bps — listed in [`TESTING.md`](./TESTING.md) |
+| `AarkaParityHook` × 15 | one per series, threshold 100 bps, redeployed 22 Sep with the AUDIT-24 sizing fix — listed in [`TESTING.md`](./TESTING.md) |
 | `HookLens` | `0x414326E556667b5AE9931F67cDb267D1BAF7D1D0` |
 | `AarkaSequencerFeed` | `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` — reported by the keeper, wired via `setSequencerFeed` |
 | `ExpiryCalendar` | `0x111040a3CfA607EF19693A023b157e9f806C622b` |

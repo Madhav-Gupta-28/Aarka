@@ -304,7 +304,7 @@ proof-of-concept tests before anything was written about them.
 | 21 | Low | The "max" button broke on any balance of 1,000 or more | Fixed |
 | 22 | Low | The README and this document overstated test coverage and the escape hatch | Fixed |
 | 23 | Low | The hook's 30 bps threshold sat below the ~90 bps its three pool fees cost, so it spent gas on arbs that could never clear | Fixed by parameter |
-| 24 | Low | An arb sized off the curve alone could ask for more tokens than the PoolManager physically holds, so the hook silently did nothing on the largest swaps | Fixed, ships with the next deployment |
+| 24 | Low | An arb sized off the curve alone could ask for more tokens than the PoolManager physically holds, so the hook silently did nothing on the largest swaps | Fixed and redeployed |
 | — | Info | Two economic attacks on the hook were measured and neither pays | Recorded in `test/hook/EconomicAudit.t.sol` |
 
 ---
@@ -491,8 +491,15 @@ manual test run — split, sell upside, buy upside, sell floor, recombine, and a
 made the hook mint 206.07 NVDA and pay 1,180.71 USDG to LPs — behaved exactly as quoted.
 
 Two fork tests pin it: one replays the block and asserts the deployed hook did nothing, the other
-etches the fixed hook at the same mined address and asserts it acts. The deployed hooks still carry
-the old sizing; the fix ships with the next deployment.
+etches the fixed hook at the same mined address and asserts it acts.
+
+**Redeployed the same day.** Fifteen new hooks, one per series — the three 06 NOV series had no
+market before and have one now — each opened at 0 bps against a stock pool realigned to the mirrored
+Chainlink price. Every hook's runtime code matches the 0.8.33 build byte for byte once immutables
+are masked, and all fifteen are verified on the explorer. Replaying the same 198,652-token dump
+against the live deployment leaves 5,173 bps where the old hook left 9,555: the hook now acts at the
+size the balance allows, and the rest is the depth limit described above. The twelve previous hooks
+remain on chain and still work; nothing reads them.
 
 ---
 

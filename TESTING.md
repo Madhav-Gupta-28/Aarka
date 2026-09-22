@@ -21,7 +21,7 @@ Redeployed on 15 September 2026 with the settlement and symbol fixes from the se
 | AarkaFactory | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
 | AarkaLens | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
 | AarkaRouter | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
-| AarkaParityHook | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` (NVDA $210 · 30 OCT 26) |
+| AarkaParityHook | `0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040` (NVDA $210 · 30 OCT 26) |
 | AarkaSequencerFeed | `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` |
 | NVDA (stand-in) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | TSLA (stand-in) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
@@ -43,23 +43,30 @@ Live series, two strikes on each stock for three expiries. Symbols carry the str
 Every contract below is verified on the
 [explorer](https://explorer.testnet.chain.robinhood.com), so each address opens to readable source.
 
-Every series has a market: a Uniswap v4 pool for each half against USDG, and its own parity hook.
-Each opened at a Black-Scholes split of its stock's pool price, at exactly 0 bps.
+All fifteen series have a market: a Uniswap v4 pool for each half against USDG, and its own parity
+hook. Every one opened at a Black-Scholes split of its stock's pool price, at exactly 0 bps.
+
+The hooks were redeployed on 22 September with the AUDIT-24 sizing fix, and the two stock pools
+realigned to the mirrored Chainlink price at the same time — NVDA $227.31, TSLA $376.12. The
+previous twelve hooks are still on chain and still work; nothing reads them any more.
 
 | Market | Parity hook |
 | --- | --- |
-| NVDA $210 · 25 SEP 26 | `0x533f1ee34100eFF09031D3d5DE802d290dBc0040` |
-| NVDA $230 · 25 SEP 26 | `0x39aC5d768D0Dd32c1Fd133391308aC638A89c040` |
-| TSLA $350 · 25 SEP 26 | `0x6de83EC68484355746F205B9A822785d7e714040` |
-| TSLA $400 · 25 SEP 26 | `0xce07DfbeE7254c08E773dd7C04a7A7e444B54040` |
-| NVDA $210 · 02 OCT 26 | `0x7fbd3d2aA2285cee5014bce41584F1A288C94040` |
-| NVDA $230 · 02 OCT 26 | `0x794bb110Bfb78CEeF57d859FfC29103770478040` |
-| TSLA $350 · 02 OCT 26 | `0x9b11f7704dAd01428d6D477623696b3821E00040` |
-| TSLA $400 · 02 OCT 26 | `0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040` |
-| NVDA $210 · 30 OCT 26 | `0x553f8d548b85b078152A6901fA19bEa19D8a0040` |
-| NVDA $230 · 30 OCT 26 | `0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040` |
-| TSLA $350 · 30 OCT 26 | `0x578Ed50250440813887Db1723E8bb8d04F804040` |
-| TSLA $400 · 30 OCT 26 | `0x3B14541fc6D434CA29a0f5575F0881d7974F0040` |
+| NVDA $210 · 25 SEP 26 | `0x4A5AFd38edB9B00F8e668c9Ca8270f4696fbC040` |
+| NVDA $230 · 25 SEP 26 | `0x4ED10b89A0c37efDA6d8473A4CB2c81836aB0040` |
+| TSLA $350 · 25 SEP 26 | `0xc1c6720e95E70B51Bbb605101273216DEf7a4040` |
+| TSLA $400 · 25 SEP 26 | `0x029E9Fa2ef97c2D56A1DA76eCD089807af2DC040` |
+| NVDA $210 · 02 OCT 26 | `0x5e8C54dd0ed38bFb7b610e200FEE4741e6AEc040` |
+| NVDA $230 · 02 OCT 26 | `0xF964F74F6c9E9E50024ce3b69d695A0ECd6e4040` |
+| TSLA $350 · 02 OCT 26 | `0x697e9F586C5cbf2A8b04fc1A3199fe60d16A0040` |
+| TSLA $400 · 02 OCT 26 | `0x1E11c14a6A2EadA61Ca024c1514B2DaFBC7A8040` |
+| NVDA $210 · 30 OCT 26 | `0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040` |
+| NVDA $230 · 30 OCT 26 | `0x198296A48A6695064d0eb3c6ac384DFfE477C040` |
+| TSLA $350 · 30 OCT 26 | `0x18362F957046037EEe5E640067658cd96B338040` |
+| TSLA $400 · 30 OCT 26 | `0x5BD834aad040ca50707Ed5fF69701DE1697f8040` |
+| NVDA $210 · 06 NOV 26 | `0x0a7154C1FdABeCb18f3B7CF216264BDa19e88040` |
+| NVDA $230 · 06 NOV 26 | `0x7F75Ec34366D6373480c65b983AdEA9310df0040` |
+| TSLA $350 · 06 NOV 26 | `0xF1c210002bFC398dEC493BF5Eeb86B597f4F4040` |
 
 ### Previous deployment
 
