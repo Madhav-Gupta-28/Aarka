@@ -45,6 +45,29 @@ export const MARKETS: Record<string, `0x${string}`> = {
   "0xb6253f080eca3de2ff6c4c0ad1bcacbad2f3d28b": "0xF1c210002bFC398dEC493BF5Eeb86B597f4F4040", // TSLA $350 · 6 Nov
 };
 
+/**
+ * Hooks from the previous deployment, still on chain and still holding their history.
+ *
+ * A hook is bound to one series at construction, so replacing the hook replaces the market but not
+ * the series. The parity log reads these too: what the mechanism has done is a fact about the
+ * protocol, not about whichever set of hooks is current. Superseded 22 Sep 2026 by the AUDIT-24
+ * sizing fix.
+ */
+export const LEGACY_MARKETS: Record<string, `0x${string}`> = {
+  "0xdfb1acfaa87eaf10136242c3f273fe4cea606ac7": "0x533f1ee34100eFF09031D3d5DE802d290dBc0040",
+  "0xbc25a8f80b30622aacfeefa054dc44125c1cd9e7": "0x39aC5d768D0Dd32c1Fd133391308aC638A89c040",
+  "0x46a335b9611d6e542f7dc6339097c90b7804881a": "0x6de83EC68484355746F205B9A822785d7e714040",
+  "0x2b51ed3125cf98262b1c9bf075b81371315c29af": "0xce07DfbeE7254c08E773dd7C04a7A7e444B54040",
+  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": "0x7fbd3d2aA2285cee5014bce41584F1A288C94040",
+  "0x81105a4a2d74cb353655469c815f55d392ceabb7": "0x794bb110Bfb78CEeF57d859FfC29103770478040",
+  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": "0x9b11f7704dAd01428d6D477623696b3821E00040",
+  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": "0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040",
+  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": "0x553f8d548b85b078152A6901fA19bEa19D8a0040",
+  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": "0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040",
+  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": "0x578Ed50250440813887Db1723E8bb8d04F804040",
+  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": "0x3B14541fc6D434CA29a0f5575F0881d7974F0040",
+};
+
 export const marketFor = (series: string) => MARKETS[series.toLowerCase()];
 
 /** Every pool Aarka opens uses one fee tier; the hook and HookLens assume it too. */
@@ -151,6 +174,33 @@ export const SERIES_ABI = [
    outputs: [{type: "uint64"}]},
   {type: "function", name: "CHALLENGE_PERIOD", stateMutability: "view", inputs: [],
    outputs: [{type: "uint256"}]},
+] as const;
+
+export const HOOK_ABI = [
+  {type: "event", name: "ParityRestored", inputs: [
+    {name: "minted", type: "bool", indexed: false},
+    {name: "size", type: "uint256", indexed: false},
+    {name: "profit", type: "uint256", indexed: false}]},
+  {type: "function", name: "minDeviationBps", stateMutability: "view", inputs: [],
+   outputs: [{type: "uint256"}]},
+  {type: "function", name: "maxArbSize", stateMutability: "view", inputs: [],
+   outputs: [{type: "uint256"}]},
+] as const;
+
+export const SERIES_EVENTS_ABI = [
+  {type: "event", name: "Minted", inputs: [
+    {name: "by", type: "address", indexed: true},
+    {name: "to", type: "address", indexed: true},
+    {name: "amount", type: "uint256", indexed: false}]},
+  {type: "event", name: "Redeemed", inputs: [
+    {name: "by", type: "address", indexed: true},
+    {name: "to", type: "address", indexed: true},
+    {name: "amount", type: "uint256", indexed: false}]},
+  {type: "event", name: "Settled", inputs: [
+    {name: "roundId", type: "uint80", indexed: true},
+    {name: "price", type: "uint256", indexed: false},
+    {name: "updatedAt", type: "uint256", indexed: false},
+    {name: "floorPayout", type: "uint256", indexed: false}]},
 ] as const;
 
 export const HOOK_LENS_ABI = [

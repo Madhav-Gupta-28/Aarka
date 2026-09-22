@@ -2,7 +2,7 @@
 
 import {useState} from "react";
 import {reference} from "@/lib/pricing";
-import type {SeriesView} from "./SeriesCard";
+import type {SeriesView} from "@/lib/types";
 
 /**
  * A reference price for the two halves. Explicitly a model — nothing on-chain reads it, and the

@@ -1,15 +1,10 @@
 import {publicClient} from "./client";
 import {ADDRESSES, LENS_ABI} from "./contracts";
-import type {SeriesView} from "@/components/SeriesCard";
+import type {Position, SeriesView} from "./types";
 
 const PAGE = 25n;
 
-export type Position = {
-  series: `0x${string}`;
-  underlyingBalance: bigint; underlyingAllowance: bigint;
-  floorBalance: bigint; upsideBalance: bigint;
-  redeemable: bigint; floorClaimable: bigint; upsideClaimable: bigint;
-};
+export type {Position, SeriesView};
 
 /**
  * Read every series a page at a time. The lens's one-shot `allSeries` walks the whole list in a
@@ -41,3 +36,6 @@ export async function readPositions(holder: `0x${string}`): Promise<Position[]> 
 
 /** A settled series whose halves have all been claimed has nothing left to show anyone. */
 export const isFinished = (s: SeriesView) => s.status === 3 && s.halfSupply === 0n;
+
+export const findSeries = (rows: SeriesView[] | null, address?: string) =>
+  rows?.find((s) => s.series.toLowerCase() === address?.toLowerCase());

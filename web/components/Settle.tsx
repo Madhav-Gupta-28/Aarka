@@ -6,7 +6,7 @@ import {SERIES_ABI} from "@/lib/contracts";
 import {findSettlementRound, LATE_SETTLEMENT_DELAY, MAX_LOOKBACK_SECONDS, type Candidate} from "@/lib/settle";
 import {usd} from "@/lib/format";
 import {robinhoodTestnet} from "@/lib/chain";
-import type {SeriesView} from "./SeriesCard";
+import type {SeriesView} from "@/lib/types";
 
 /**
  * Anyone can settle. The contract does not read the latest price — the caller names a round and

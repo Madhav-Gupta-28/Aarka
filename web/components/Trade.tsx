@@ -7,7 +7,7 @@ import {publicClient} from "@/lib/client";
 import {robinhoodTestnet} from "@/lib/chain";
 import {ADDRESSES, HOOK_LENS_ABI, ROUTER_ABI, TOKEN_ABI, hookedPoolKey, marketFor} from "@/lib/contracts";
 import {units} from "@/lib/format";
-import type {SeriesView} from "./SeriesCard";
+import type {SeriesView} from "@/lib/types";
 
 type Mode = "sellUpside" | "sellFloor" | "buyUpside";
 

@@ -1,155 +1,154 @@
 "use client";
 
-import {useCallback, useEffect, useState} from "react";
-import {ADDRESSES, marketFor} from "@/lib/contracts";
-import {readSeries, isFinished} from "@/lib/lens";
-import {robinhoodTestnet} from "@/lib/chain";
+import Link from "next/link";
+import {useData} from "@/components/DataProvider";
+import {StatStrip} from "@/components/StatStrip";
 import {PayoffChart} from "@/components/PayoffChart";
-import {SeriesCard, type SeriesView} from "@/components/SeriesCard";
-import {Mark} from "@/components/Mark";
-import {Connect} from "@/components/Connect";
-import {Split} from "@/components/Split";
-import {Claim} from "@/components/Claim";
-import {Settle} from "@/components/Settle";
-import {Faucet, UsdgFaucet} from "@/components/Faucet";
-import {Trade} from "@/components/Trade";
-import {Positions} from "@/components/Positions";
-import {Indicative} from "@/components/Indicative";
-import {ParityPanel} from "@/components/ParityPanel";
+import {ADDRESSES, marketFor} from "@/lib/contracts";
+import {usd, cash, expiryLabel, countdown} from "@/lib/format";
 
 export default function Home() {
-  const [series, setSeries] = useState<SeriesView[] | null>(null);
-  const [active, setActive] = useState<number | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const {series, parity, error} = useData();
 
-  const load = useCallback(async () => {
-    try {
-      // Paged, and without series that are settled and fully claimed: nothing is left in those.
-      const rows = await readSeries();
-      setSeries(rows.filter((r) => !isFinished(r)));
-      setErr(null);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "could not reach the chain");
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15_000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  // Open on the hooked series if it is still live, otherwise the nearest live one, so a first
-  // visit lands on something that can be split rather than on a series that expired weeks ago.
-  const defaultIndex = (() => {
-    if (!series?.length) return 0;
-    const hooked = series.findIndex(
-      (r) => r.series.toLowerCase() === ADDRESSES.flagshipSeries.toLowerCase() && r.status === 0);
-    if (hooked >= 0) return hooked;
-    const live = series
-      .map((r, i) => ({r, i}))
-      .filter(({r}) => r.status === 0)
-      .sort((a, b) => Number(a.r.expiry - b.r.expiry));
-    return live.length ? live[0].i : 0;
-  })();
-  const s = series?.[active ?? defaultIndex];
-  // The parity panel follows the selected series when it has a market, else the flagship.
-  const hookedIndex = series?.findIndex((r) => r.status === 0 && !!marketFor(r.series)) ?? -1;
-  const hooked = s && marketFor(s.series) ? s
-    : series?.find((r) => r.series.toLowerCase() === ADDRESSES.flagshipSeries.toLowerCase());
-  const hookedMarket = hooked ? marketFor(hooked.series) : undefined;
-  const expired = s ? s.status !== 0 : false;
+  // Land on the flagship if it is still live, otherwise the nearest live market, so the chart is
+  // always showing something a visitor can actually go and trade.
+  const live = (series ?? []).filter((s) => s.status === 0 && !!marketFor(s.series));
+  const s = live.find((r) => r.series.toLowerCase() === ADDRESSES.flagshipSeries.toLowerCase())
+    ?? [...live].sort((a, b) => Number(b.expiry - a.expiry))[0];
+  const p = s ? parity.get(s.series.toLowerCase()) : undefined;
 
   return (
-    <div className="wrap">
-      <header>
-        <Mark />
-        <div className="brand">Aarka</div>
-        <div className="net">
-          <span className="netLong">{robinhoodTestnet.name}</span>
-          <span className="netShort">Testnet</span>
-        </div>
-        <Connect />
-      </header>
-
-      <section className="hero">
+    <>
+      <section className="lead">
         <h1>
-          Own a stock? Sell its upside for cash.
-          <br />
+          Own a stock? Sell its upside for cash.{" "}
           <span className="accent">Want upside? Buy it without buying the stock.</span>
         </h1>
         <p>
-          Deposit one tokenized stock, get two tradable tokens back. One takes everything up to a
-          strike price. The other takes everything above it. Return both at any time to get your
-          stock back. There is no borrowing anywhere in this, so there is nothing to liquidate.
+          Deposit one tokenized share, get two tradable tokens back. One takes everything up to a
+          strike price, the other takes everything above it. Return both at any time to get your
+          share back. Nothing is borrowed anywhere in this, so there is nothing to liquidate.
         </p>
+        <div className="leadBtns">
+          <Link className="btn primary" href="/markets">Browse markets</Link>
+          <Link className="btn" href="/docs">How it works</Link>
+        </div>
       </section>
 
+      {error && <div className="err">Could not reach Robinhood Chain testnet. {error}</div>}
+      {series && <StatStrip series={series} />}
+
       {s && (
-        <>
+        <section className="section">
           <div className="sectionHead">
-            <h2>{s.underlyingSymbol} at ${(Number(s.strike) / 1e8).toFixed(0)}</h2>
-            <span>what each half is worth at expiry — hover to read any price</span>
+            <h2>{s.underlyingSymbol} at {usd(s.strike, 0)}</h2>
+            <span>
+              what each half is worth at expiry — {expiryLabel(s.expiry)}, {countdown(s.expiry)} away
+            </span>
           </div>
 
-          <div className="two">
+          <div className="work">
             <div>
               <PayoffChart
                 strike={s.strike}
                 spot={s.priceValid ? s.spotPrice : undefined}
-                settlementPrice={s.settled ? s.settlementPrice : undefined}
                 underlyingSymbol={s.underlyingSymbol}
               />
-              <Indicative s={s} />
-              <Faucet symbol={s.underlyingSymbol} token={s.underlying} />
-              <UsdgFaucet />
             </div>
 
             <div className="stack">
-              {!expired && (
-                <Trade s={s} onPickMarket={hookedIndex >= 0 ? () => setActive(hookedIndex) : undefined} />
-              )}
-              {s.settled ? <Claim s={s} /> : <Split s={s} />}
-              {expired && !s.settled && <Settle s={s} onDone={load} />}
+              <div className="panel">
+                <b className="panelTitle">What the market pays for each half today</b>
+                {p ? (
+                  <div className="ledger" style={{margin: "14px 0 0", border: 0}}>
+                    <div className="lrow"><span>{s.floorSymbol}</span><b>{cash(p.floorPrice)}</b></div>
+                    <div className="lrow"><span>{s.upsideSymbol}</span><b>{cash(p.upsidePrice)}</b></div>
+                    <div className="lrow sum"><span>together</span><b>{cash(p.sumOfHalves)}</b></div>
+                    <div className="lrow"><span>one whole share</span><b>{cash(p.underlyingPrice)}</b></div>
+                  </div>
+                ) : (
+                  <p className="explain">Reading the pools…</p>
+                )}
+                <Link className="btn primary full" href={`/markets/${s.series}`}>
+                  Open this market
+                </Link>
+                <p className="hint">
+                  The two halves add up because a hook makes them. If they drift, it buys the cheap
+                  side and sells the dear one inside the very next swap.
+                </p>
+              </div>
             </div>
           </div>
-        </>
+        </section>
       )}
 
-      <div className="sectionHead" style={{marginTop: 44}}>
-        <h2>Series</h2>
-        <span>{series ? `${series.filter((r) => r.status === 0).length} live of ${series.length} · click to switch` : ""}</span>
-      </div>
+      <section className="section">
+        <div className="sectionHead">
+          <h2>Three things you can do</h2>
+          <span>each is one transaction</span>
+        </div>
+        <div className="howGrid">
+          <div className="how">
+            <i>HOLDER</i>
+            <b>Take cash for your gains</b>
+            <p>
+              Deposit a share, keep the floor, sell the upside. You are paid today for everything
+              the stock might earn above the strike, and you keep the rest of its value.
+            </p>
+          </div>
+          <div className="how">
+            <i>SPECULATOR</i>
+            <b>Buy upside, not leverage</b>
+            <p>
+              Pay only for what the stock earns above a strike by a date. If it finishes below, the
+              token pays nothing — but nobody was ever able to liquidate you on the way.
+            </p>
+          </div>
+          <div className="how">
+            <i>ANYONE</i>
+            <b>Change your mind</b>
+            <p>
+              Hold one of each half and the vault swaps them back for a whole share, at any time,
+              for no fee. Holding both is exactly holding the stock.
+            </p>
+          </div>
+        </div>
+      </section>
 
-      {err && <div className="skeleton">Could not reach Robinhood Chain testnet. {err}</div>}
-      {!series && !err && <div className="skeleton">Reading the chain…</div>}
-
-      <div className="grid">
-        {series?.map((row, i) => (
-          <SeriesCard key={row.series} s={row} onSelect={() => setActive(i)} />
-        ))}
-      </div>
-
-      {series && <Positions series={series} />}
-      {hooked && hookedMarket && (
-        <ParityPanel
-          key={hookedMarket}
-          hook={hookedMarket}
-          floorToken={hooked.floorToken}
-          upsideToken={hooked.upsideToken}
-          floorSymbol={hooked.floorSymbol}
-          upsideSymbol={hooked.upsideSymbol}
-        />
-      )}
-
-      <p className="note">
-        Deployed to Robinhood Chain testnet. The stock tokens are stand-ins, because testnet has
-        none; their price feeds carry the real Chainlink prices from Robinhood Chain mainnet.
-        Everything else is the real protocol.{" "}
-        <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.factory}`}>Factory</a>{" "}
-        · <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${ADDRESSES.router}`}>Router</a>{" "}
-        {hookedMarket && <>· <a href={`${robinhoodTestnet.blockExplorers.default.url}/address/${hookedMarket}`}>Parity hook</a></>}
-      </p>
-    </div>
+      <section className="section">
+        <div className="sectionHead">
+          <h2>Built to be checked, not trusted</h2>
+          <span></span>
+        </div>
+        <div className="howGrid">
+          <div className="how">
+            <i>SETTLEMENT</i>
+            <b>Anyone can close a series</b>
+            <p>
+              The settler names a feed round and the contract proves it is the right one. A
+              challenge window lets anyone replace it with a better round.{" "}
+              <Link href="/settle">The queue →</Link>
+            </p>
+          </div>
+          <div className="how">
+            <i>PARITY</i>
+            <b>The halves have to add up</b>
+            <p>
+              A Uniswap v4 hook enforces the identity after every swap and pays what it earns to
+              liquidity providers. Break it yourself and watch.{" "}
+              <Link href="/parity">Live parity →</Link>
+            </p>
+          </div>
+          <div className="how">
+            <i>AUDIT</i>
+            <b>Every finding written down</b>
+            <p>
+              Reviewed twice, plus a third round found in manual testing — including one where the
+              hook went quiet on the largest swaps. All of it is in the repository.
+            </p>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

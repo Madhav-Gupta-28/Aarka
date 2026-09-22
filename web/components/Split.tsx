@@ -6,7 +6,7 @@ import {formatUnits, parseUnits, maxUint256} from "viem";
 import {SERIES_ABI, TOKEN_ABI} from "@/lib/contracts";
 import {robinhoodTestnet} from "@/lib/chain";
 import {units} from "@/lib/format";
-import type {SeriesView} from "./SeriesCard";
+import type {SeriesView} from "@/lib/types";
 
 /**
  * Mint and redeem for one series.

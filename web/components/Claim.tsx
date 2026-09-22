@@ -5,7 +5,7 @@ import {useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContr
 import {SERIES_ABI, TOKEN_ABI} from "@/lib/contracts";
 import {robinhoodTestnet} from "@/lib/chain";
 import {units, usd, pct} from "@/lib/format";
-import type {SeriesView} from "./SeriesCard";
+import type {SeriesView} from "@/lib/types";
 
 /** Burn a half, take its share of the vault. Both legs round down; the dust stays behind. */
 export function Claim({s}: {s: SeriesView}) {
