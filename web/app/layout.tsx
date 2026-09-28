@@ -1,24 +1,42 @@
 import type {Metadata, Viewport} from "next";
+import {Gloock, Martian_Mono, Schibsted_Grotesk} from "next/font/google";
+import localFont from "next/font/local";
 import {Providers} from "@/components/Providers";
 import "./globals.css";
+import "./pages.css";
+
+/**
+ * Four voices. A knife-cut serif for feeling, a sturdy grotesk for reading, a terminal mono for
+ * every number, and a pixel face for stamps and the one emphasis word per page. Swapping any of
+ * them is one line here; everything else reads the CSS variables.
+ */
+const display = Gloock({weight: "400", subsets: ["latin"], variable: "--f-display", display: "swap"});
+const ui = Schibsted_Grotesk({subsets: ["latin"], variable: "--f-ui", display: "swap"});
+const num = Martian_Mono({subsets: ["latin"], variable: "--f-num", display: "swap", axes: ["wdth"]});
+const px = localFont({src: "./fonts/DepartureMono-Regular.woff2", variable: "--f-px", display: "swap"});
+
+/** Set before first paint so a Limestone reader never sees a flash of Basalt. A fixed string. */
+const THEME_BOOT = `try{var t=localStorage.getItem('aarka.theme');if(t==='limestone')document.documentElement.dataset.theme=t}catch(e){}`;
 
 export const metadata: Metadata = {
   title: "Aarka — split a stock into a floor and the upside",
   description:
-    "Own a stock? Sell its upside for cash. Want upside? Buy it without buying the stock. " +
-    "Tokenized equities on Robinhood Chain.",
+    "Keep the part you want. Sell or trade the part you don't. Put them back together anytime. " +
+    "Tokenized stocks, split into a Floor and an Upside, priced by an independent public source.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0e1116",
-  colorScheme: "dark",
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${display.variable} ${ui.variable} ${num.variable} ${px.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{__html: THEME_BOOT}} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>
