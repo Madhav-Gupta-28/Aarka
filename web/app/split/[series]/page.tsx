@@ -4,6 +4,7 @@ import Link from "next/link";
 import {useParams} from "next/navigation";
 import {useState} from "react";
 import {ActionPanel} from "@/components/ActionPanel";
+import {ParityModal} from "@/components/ParityModal";
 import {Shell} from "@/components/Chrome";
 import {DigitRoll} from "@/components/Motion";
 import {Relic, Reveal, SunAnim} from "@/components/Relic";
@@ -30,6 +31,7 @@ export default function SplitDetail() {
   const [tab, setTab] = useState<Kind>("split");
   const [details, setDetails] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [scales, setScales] = useState(false);
 
   if (!s || !q) return <Shell><SplitMissing loading={isLoading} /></Shell>;
 
@@ -41,6 +43,7 @@ export default function SplitDetail() {
 
   return (
     <Shell>
+      {scales && <ParityModal s={s} onClose={() => setScales(false)} />}
       <div className="crumbs">
         <Link href="/markets">MARKETS</Link><span>/</span><Link href={`/markets?stock=${s.underlyingSymbol}`}>{name.toUpperCase()}</Link><span>/</span>
         <span className="here">${K} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
@@ -199,7 +202,7 @@ export default function SplitDetail() {
                       <dt>Floor pays</dt><dd>min(P, {q.strike.toFixed(2)}) / P of a share token</dd>
                       <dt>Upside pays</dt><dd>max(P − {q.strike.toFixed(2)}, 0) / P of a share token</dd>
                       <dt>Price source</dt><dd>Chainlink {s.underlyingSymbol}/USD feed, <a href={explorerAddr(s.feed)} target="_blank" rel="noreferrer">{short(s.feed)}</a>. P = the last round at or before {endLong(s.expiry)}, no more than 26 hours old.</dd>
-                      <dt>The Scales</dt><dd>{marketFor(s.series) ? <>Uniswap v4 parity hook <a href={explorerAddr(marketFor(s.series)!)} target="_blank" rel="noreferrer">{short(marketFor(s.series))}</a>. It trades the gap when Floor + Upside drift from the share.</> : "No pools yet."}</dd>
+                      <dt>The Scales</dt><dd>{marketFor(s.series) ? <>Uniswap v4 parity hook <a href={explorerAddr(marketFor(s.series)!)} target="_blank" rel="noreferrer">{short(marketFor(s.series))}</a>. It trades the gap when Floor + Upside drift from the share. <button className="term-btn" onClick={() => setScales(true)}>WATCH IT WORK</button></> : "No pools yet."}</dd>
                       <dt>Prices shown</dt><dd>{q.source === "market" ? "Floor and Upside from their pools." : "Floor and Upside are a Black-Scholes estimate at 40% volatility. Nothing on-chain reads it."}</dd>
                       <dt>Cash</dt><dd>Test USDG, the quote asset every pool trades against. No value.</dd>
                     </dl>
