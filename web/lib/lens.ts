@@ -1,8 +1,32 @@
 import {publicClient} from "./client";
 import {ADDRESSES, LENS_ABI} from "./contracts";
-import type {SeriesView} from "@/components/SeriesCard";
 
 const PAGE = 25n;
+
+export type SeriesView = {
+  series: `0x${string}`;
+  underlying: `0x${string}`;
+  floorToken: `0x${string}`;
+  upsideToken: `0x${string}`;
+  status: number;
+  underlyingSymbol: string;
+  strike: bigint;
+  expiry: bigint;
+  floorSymbol: string;
+  upsideSymbol: string;
+  spotUpdatedAt: bigint;
+  oraclePaused: boolean;
+  claimsUnlockAt: bigint;
+  halfSupply: bigint;
+  feed: `0x${string}`;
+  spotPrice: bigint;
+  priceValid: boolean;
+  settled: boolean;
+  settlementPrice: bigint;
+  floorPayoutPerUnit: bigint;
+  upsidePayoutPerUnit: bigint;
+  totalDeposited: bigint;
+};
 
 export type Position = {
   series: `0x${string}`;
