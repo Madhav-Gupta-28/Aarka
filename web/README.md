@@ -1,7 +1,7 @@
 # Aarka — web
 
 Next.js 15 + wagmi + viem, reading Robinhood Chain testnet directly. No backend and no indexer:
-series, positions, parity and the hook's own history all come off the chain.
+series and positions come from `AarkaLens`, a page at a time.
 
 ```sh
 npm install
@@ -10,49 +10,30 @@ npm run dev          # http://localhost:3000
 
 Addresses live in `lib/contracts.ts` and point at the deployed testnet set.
 
-## Pages
-
-Each route answers one question, because the people who come here are not the same person:
-
-```
-/                    what is this, and what do the two halves cost today
-/markets             the option chain — every strike and expiry, grouped by ticker
-/markets/[series]    one market: payoff, parity, and everything you can do to it
-/portfolio           what you hold, marked at pool prices, and what you can claim
-/settle              the settlement queue; anyone can close an expired series
-/parity              the hook, live, plus every time it has actually fired
-/faucet              test stock, test cash, testnet gas — all self-serve
-/docs                how the protocol works, and every contract address
-```
-
 ## Structure
 
+The design is "The Tablet of Shamash" from the Claude Design handoff in `../project-setup-questions/`:
+Bloomberg-terminal numbers, carved-stone surfaces, a brutalist grid, and pixel relics drawn from code.
+
 ```
-components/DataProvider.tsx  one poller for the whole site; series + parity, shared by context
-components/Chain.tsx         the option chain table, banded by expiry
-components/Trade.tsx         keep one half, sell the other, in one transaction (AarkaRouter)
-components/Split.tsx         deposit a stock for both halves, or recombine them
-components/Settle.tsx        settle an expired series; finds the round the contract will accept
-components/Claim.tsx         burn a half for its share of the vault once settled
-components/ParityDemo.tsx    break parity on purpose and watch the hook close it
-components/ParityLedger.tsx  floor + upside against the stock, as the chain reports it
-components/PayoffChart.tsx   the two payoffs, drawn. hover reads any price
-components/Faucet.tsx        test stock and test USDG, no permission needed
-lib/marketData.ts            parity for every market in one multicall; the hook's event log
-lib/lens.ts                  paged reads of series and positions
-lib/settle.ts                the contract's settlement rules, applied before you send
-lib/contracts.ts             addresses + the minimal ABIs actually used
+app/page.tsx                      home: hero, how it works, What if?, three ways, built to be fair
+app/markets/                      every split, by stock, end date and line; cards or a sortable table
+app/split/[series]/               split detail: price, Floor + Upside = 1 share, What if?, action panel
+app/split/[series]/split/         guided split, and ?mode=rejoin to put back together
+app/split/[series]/trade/         keep one half and sell the other, or buy a half with cash
+app/split/[series]/final/         final price day: countdown, carve the price, collect
+app/ledger/                       holdings, ready to collect, history
+app/sun/  app/learn/  app/practice/   price source, the six tablets, free test shares
+components/Chrome.tsx             header, nav slab, Simple/Terminal, theme, wallet, price strip, tab bar
+components/WhatIf.tsx             the payoff chart and the sun-handled slider
+lib/relics.ts                     the pixel relic library, generated as SVG data URIs
+lib/actions.ts                    every action: amounts, what you give and get, permission, sending
+lib/data.ts                       series, pool prices (or a labelled estimate), balances, positions
+lib/settle.ts                     the contract's settlement rules, applied before you send
+app/globals.css · app/pages.css   tokens for Basalt and Limestone, components, page layouts
 ```
 
-## Two things worth knowing
+Fonts: Gloock (headlines), Schibsted Grotesk (interface), Martian Mono (numbers), Departure Mono
+(pixel stamps and the one emphasis word per page, OFL, in `app/fonts`). Each is one line in `app/layout.tsx`.
 
-**Reads are batched.** Fifteen markets would be fifteen `parity` calls. Multicall3 is at its
-canonical address on this chain, so `readParity` sends one. `DataProvider` then holds the result for
-every page, which is why moving between them shows data instead of an empty frame.
-
-**The parity log reads retired hooks too.** Replacing a hook replaces the market, not the series, so
-`LEGACY_MARKETS` keeps the superseded addresses and the history survives a redeployment. What the
-mechanism has done is a fact about the protocol, not about whichever hooks are current.
-
-Every write passes the Robinhood Chain testnet chain id, so a wallet on another network cannot sign
-it (AUDIT-18).
+Every write passes the Robinhood Chain testnet chain id, so a wallet on another network cannot sign it.

@@ -1,48 +1,44 @@
 import type {Metadata, Viewport} from "next";
-import {IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Serif} from "next/font/google";
+import {Gloock, Martian_Mono, Schibsted_Grotesk} from "next/font/google";
+import localFont from "next/font/local";
 import {Providers} from "@/components/Providers";
-import {DataProvider} from "@/components/DataProvider";
-import {Nav} from "@/components/Nav";
-import {Footer} from "@/components/Footer";
 import "./globals.css";
+import "./pages.css";
 
-// One superfamily in three roles: serif for display, sans for the interface, mono for every
-// number. Plex was drawn for data-dense screens, and its mono is the reason the tables line up.
-const sans = IBM_Plex_Sans({
-  subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-sans", display: "swap",
-});
-const mono = IBM_Plex_Mono({
-  subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap",
-});
-const serif = IBM_Plex_Serif({
-  subsets: ["latin"], weight: ["400", "500"], variable: "--font-serif", display: "swap",
-});
+/**
+ * Four voices. A knife-cut serif for feeling, a sturdy grotesk for reading, a terminal mono for
+ * every number, and a pixel face for stamps and the one emphasis word per page. Swapping any of
+ * them is one line here; everything else reads the CSS variables.
+ */
+const display = Gloock({weight: "400", subsets: ["latin"], variable: "--f-display", display: "swap"});
+const ui = Schibsted_Grotesk({subsets: ["latin"], variable: "--f-ui", display: "swap"});
+const num = Martian_Mono({subsets: ["latin"], variable: "--f-num", display: "swap", axes: ["wdth"]});
+const px = localFont({src: "./fonts/DepartureMono-Regular.woff2", variable: "--f-px", display: "swap"});
+
+/** Set before first paint so a Limestone reader never sees a flash of Basalt. A fixed string. */
+const THEME_BOOT = `try{var t=localStorage.getItem('aarka.theme');if(t==='limestone')document.documentElement.dataset.theme=t}catch(e){}`;
 
 export const metadata: Metadata = {
-  title: {default: "Aarka — a floor and the upside, priced separately", template: "%s · Aarka"},
+  title: "Aarka — split a stock into a floor and the upside",
   description:
-    "Split a tokenized stock into a floor that pays up to a strike and an upside that pays " +
-    "above it. No borrowing, nothing to liquidate. Live on Robinhood Chain.",
+    "Keep the part you want. Sell or trade the part you don't. Put them back together anytime. " +
+    "Tokenized stocks, split into a Floor and an Upside, priced by an independent public source.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0e1116",
-  colorScheme: "dark",
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable} ${serif.variable}`}>
+    <html lang="en" className={`${display.variable} ${ui.variable} ${num.variable} ${px.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{__html: THEME_BOOT}} />
+      </head>
       <body>
-        <Providers>
-          <DataProvider>
-            <Nav />
-            <main className="wrap">{children}</main>
-            <Footer />
-          </DataProvider>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

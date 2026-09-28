@@ -1,0 +1,292 @@
+"use client";
+
+import Link from "next/link";
+import {usePathname} from "next/navigation";
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
+import {useAccount, useConnect, useDisconnect, useSwitchChain} from "wagmi";
+import {robinhoodTestnet} from "@/lib/chain";
+import {quoteFor, stocksOf, useParityAll, useSeries} from "@/lib/data";
+import {endCode, money, short} from "@/lib/format";
+import {explorerAddr} from "@/lib/tx";
+import {usePrefs, useReducedMotion} from "@/lib/ui";
+import {Mark} from "./Mark";
+import {Relic} from "./Relic";
+
+const NAV = [
+  {href: "/", label: "Home", key: ""},
+  {href: "/markets", label: "Markets", key: "F1"},
+  {href: "/ledger", label: "My ledger", key: "F2"},
+  {href: "/learn", label: "Learn", key: "F3"},
+  {href: "/sun", label: "The Sun", key: "F4"},
+];
+
+function activeIndex(path: string) {
+  if (path === "/") return 0;
+  if (path.startsWith("/markets") || path.startsWith("/split") || path.startsWith("/practice")) return 1;
+  if (path.startsWith("/ledger")) return 2;
+  if (path.startsWith("/learn")) return 3;
+  if (path.startsWith("/sun")) return 4;
+  return -1;
+}
+
+const useIsoLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/** The nav slab: an ochre key slides under the current page, a ghost follows the pointer. */
+function NavSlab() {
+  const path = usePathname();
+  const cur = activeIndex(path);
+  const ref = useRef<HTMLElement>(null);
+  const [m, setM] = useState<{x: number; w: number}[]>([]);
+  const [hov, setHov] = useState<number | null>(null);
+
+  const measure = useCallback(() => {
+    if (!ref.current) return;
+    setM(Array.from(ref.current.querySelectorAll<HTMLElement>("a")).map((el) => ({x: el.offsetLeft, w: el.offsetWidth})));
+  }, []);
+  // Web fonts land after first paint and change every key's width, so watch the keys themselves.
+  useIsoLayout(() => {
+    measure();
+    document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined" || !ref.current) return;
+    const ro = new ResizeObserver(measure);
+    ref.current.querySelectorAll("a").forEach((a) => ro.observe(a));
+    return () => ro.disconnect();
+  }, [measure]);
+
+  const A = m[cur] ?? {x: 0, w: 0};
+  const H = hov != null ? m[hov] ?? A : A;
+  return (
+    <nav ref={ref} aria-label="Main" className="navslab" onMouseLeave={() => setHov(null)}>
+      <span aria-hidden className="ghost" style={{left: H.x, width: H.w, opacity: hov != null && hov !== cur ? 1 : 0}} />
+      <span aria-hidden className="slab" style={{left: A.x, width: A.w, opacity: m.length && cur >= 0 ? 1 : 0}} />
+      {NAV.map((n, i) => (
+        <Link key={n.href} href={n.href} aria-current={i === cur ? "page" : undefined}
+              onMouseEnter={() => setHov(i)} onFocus={() => setHov(i)}>
+          {n.label}{n.key && <span className="key">{n.key}</span>}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export function ViewSwitch() {
+  const {view, setView} = usePrefs();
+  return (
+    <>
+    <button className="view-pill" aria-label={`View: ${view}. Switch view`} onClick={() => setView(view === "simple" ? "terminal" : "simple")}>
+      {view === "simple" ? "SIMPLE" : "TERMINAL"} ⇄
+    </button>
+    <div role="group" aria-label="View" className="seg view" style={{gridAutoColumns: "minmax(0, 1fr)"}}>
+      <span aria-hidden className="knob" style={{width: "calc(50% - 4px)", transform: view === "terminal" ? "translateX(100%)" : "none"}} />
+      <button aria-pressed={view === "simple"} onClick={() => setView("simple")}>SIMPLE</button>
+      <button aria-pressed={view === "terminal"} onClick={() => setView("terminal")}>TERMINAL</button>
+    </div>
+    </>
+  );
+}
+
+function ThemeButton() {
+  const {theme, setTheme} = usePrefs();
+  const next = theme === "basalt" ? "limestone" : "basalt";
+  return (
+    <button className="icon-btn" onClick={() => setTheme(next)}
+            aria-label={`Theme: ${theme === "basalt" ? "Basalt" : "Limestone"}. Switch to ${next === "basalt" ? "Basalt" : "Limestone"}`}>
+      <span className="theme-dot" />
+    </button>
+  );
+}
+
+export function WalletButton({compact}: {compact?: boolean}) {
+  const {address, isConnected, chainId} = useAccount();
+  const {connect, connectors, isPending} = useConnect();
+  const {disconnect} = useDisconnect();
+  const {switchChain} = useSwitchChain();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  if (!isConnected) {
+    const c = connectors[0];
+    return (
+      <button className="wallet-btn" disabled={!c || isPending} onClick={() => c && connect({connector: c})}>
+        {isPending ? "Connecting…" : !c ? "No wallet found" : compact ? "Connect" : "Connect wallet"}
+      </button>
+    );
+  }
+  if (chainId !== robinhoodTestnet.id) {
+    return (
+      <button className="wallet-btn wrong" onClick={() => switchChain({chainId: robinhoodTestnet.id})}>
+        {compact ? "Switch" : "Wrong network · switch"}
+      </button>
+    );
+  }
+  return (
+    <div ref={box} style={{position: "relative"}}>
+      <button className="wallet-btn connected" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="dot" />{short(address)}<span className="muted">▾</span>
+      </button>
+      {open && (
+        <div role="menu" className="wallet-menu">
+          <button role="menuitem" onClick={() => {
+            navigator.clipboard?.writeText(address!).catch(() => {});
+            setCopied(true); setTimeout(() => setCopied(false), 1500);
+          }}>
+            Copy address <span className="mono muted" style={{fontSize: 12}}>{copied ? "COPIED" : short(address)}</span>
+          </button>
+          <Link role="menuitem" href="/ledger" onClick={() => setOpen(false)}>My ledger <span className="mono gold">F2</span></Link>
+          <a role="menuitem" href={explorerAddr(address!)} target="_blank" rel="noreferrer">View on explorer <span>↗</span></a>
+          <button role="menuitem" onClick={() => { disconnect(); setOpen(false); }}>Disconnect</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SiteHeader({overlay}: {overlay?: boolean}) {
+  return (
+    <header className={`site-head${overlay ? " overlay" : ""}`}>
+      <Link href="/" aria-label="Aarka home" className="brand">
+        <Mark size={36} ground={overlay ? "var(--bg)" : "var(--bg)"} />
+        <span className="word">AARKA</span>
+      </Link>
+      <NavSlab />
+      <div className="head-tools">
+        <ViewSwitch />
+        <ThemeButton />
+        <WalletButton />
+      </div>
+    </header>
+  );
+}
+
+/** The live price strip: every stock, then every open split's two halves, scrolling at 30px/s. */
+export function PriceStrip() {
+  const {data: rows} = useSeries();
+  const {data: parity} = useParityAll(rows);
+  const belt = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  const stocks = stocksOf(rows);
+  const open = (rows ?? []).filter((r) => r.status === 0);
+  const fresh = stocks.length > 0 && stocks.every((s) => s.fresh);
+
+  const items: React.ReactNode[] = [
+    ...stocks.map((s) => (
+      <span className="item" key={`s${s.symbol}`}>
+        <b>{s.symbol}</b><span className="px">{s.spot ? money(s.spot) : "—"}</span>
+        <span className={s.fresh ? "up" : "down"}>{s.fresh ? "● LIVE" : "● DELAYED"}</span>
+      </span>
+    )),
+    ...open.map((r) => {
+      const q = quoteFor(r, parity);
+      return (
+        <span className="item" key={r.series}>
+          <b>{r.underlyingSymbol} ${Math.round(q.strike)} {endCode(r.expiry)}</b>
+          <span className="muted">FLOOR</span><span className="px">{money(q.floor)}</span>
+          <span className="muted">UPSIDE</span><span className="px">{money(q.upside)}</span>
+        </span>
+      );
+    }),
+  ];
+
+  useEffect(() => {
+    if (reduce || !items.length) return;
+    let x = 0, raf = 0, last = performance.now();
+    const step = (t: number) => {
+      const el = belt.current;
+      if (el) {
+        x -= (t - last) * 0.03;
+        const w = el.scrollWidth / 2;
+        if (w > 0 && -x >= w) x += w;
+        el.style.transform = `translateX(${x}px)`;
+      }
+      last = t;
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [reduce, items.length]);
+
+  return (
+    <div className={`strip${fresh ? "" : " delayed"}`}>
+      <div className="live">
+        <Relic name={fresh ? "sunSmall" : "sunDim"} size={32} />
+        <span className={`stamp-word ${fresh ? "gold" : ""}`} style={{font: "400 12px/1 var(--f-px), monospace"}}>{rows ? (fresh ? "LIVE" : "DELAYED") : "…"}</span>
+        <span className="label what">PRICES · THE SUN</span>
+      </div>
+      <div className="tape" aria-label="Live prices">
+        <div className="belt" ref={belt}>
+          {items}
+          {!reduce && items.map((it, i) => <span key={`dup${i}`} aria-hidden style={{display: "contents"}}>{it}</span>)}
+          {!rows && <span className="item muted">Reading the chain…</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TabBar() {
+  const path = usePathname();
+  const cur = activeIndex(path);
+  return (
+    <nav aria-label="Main" className="tabbar">
+      {NAV.slice(1).map((n, i) => (
+        <Link key={n.href} href={n.href} aria-current={i + 1 === cur ? "page" : undefined}>
+          <span>{n.key}</span>{n.label === "My ledger" ? "LEDGER" : n.label.toUpperCase()}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export function FootCompact() {
+  return (
+    <footer className="foot">
+      <Mark size={24} ground="var(--bg-strip)" />
+      <span className="long">NO BORROWING · NOBODY CAN FORCE-SELL YOUR POSITION · PUT BACK TOGETHER ANYTIME</span>
+      <span className="ml-auto">TESTNET · PRACTICE SHARES HAVE NO CASH VALUE · © 2026 AARKA</span>
+    </footer>
+  );
+}
+
+export function FootFull() {
+  return (
+    <footer className="foot-full">
+      <div className="promises">
+        <p>Aarka never borrows against your shares, so nobody can force-sell your position.</p>
+        <p>Final prices come from The Sun, an independent public price source.</p>
+        <p>You can always put your Floor and Upside back together into one share.</p>
+      </div>
+      <div className="foot-links">
+        <Mark size={24} ground="var(--bg-strip)" />
+        <Link href="/markets">Markets</Link><Link href="/ledger">My ledger</Link><Link href="/learn">Learn</Link>
+        <Link href="/sun">The Sun</Link><Link href="/practice">Practice shares</Link>
+        <span className="ml-auto muted">TESTNET · © 2026 AARKA</span>
+      </div>
+    </footer>
+  );
+}
+
+/** The frame every regular page shares. */
+export function Shell({children, strip = true, full, overlayHead}: {
+  children: React.ReactNode; strip?: boolean; full?: boolean; overlayHead?: boolean;
+}) {
+  return (
+    <div className="page">
+      <SiteHeader overlay={overlayHead} />
+      {strip && !overlayHead && <PriceStrip />}
+      <main id="main">{children}</main>
+      {full ? <FootFull /> : <FootCompact />}
+      <TabBar />
+    </div>
+  );
+}

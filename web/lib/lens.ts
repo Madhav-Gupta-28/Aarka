@@ -1,10 +1,39 @@
 import {publicClient} from "./client";
 import {ADDRESSES, LENS_ABI} from "./contracts";
-import type {Position, SeriesView} from "./types";
 
 const PAGE = 25n;
 
-export type {Position, SeriesView};
+export type SeriesView = {
+  series: `0x${string}`;
+  underlying: `0x${string}`;
+  floorToken: `0x${string}`;
+  upsideToken: `0x${string}`;
+  status: number;
+  underlyingSymbol: string;
+  strike: bigint;
+  expiry: bigint;
+  floorSymbol: string;
+  upsideSymbol: string;
+  spotUpdatedAt: bigint;
+  oraclePaused: boolean;
+  claimsUnlockAt: bigint;
+  halfSupply: bigint;
+  feed: `0x${string}`;
+  spotPrice: bigint;
+  priceValid: boolean;
+  settled: boolean;
+  settlementPrice: bigint;
+  floorPayoutPerUnit: bigint;
+  upsidePayoutPerUnit: bigint;
+  totalDeposited: bigint;
+};
+
+export type Position = {
+  series: `0x${string}`;
+  underlyingBalance: bigint; underlyingAllowance: bigint;
+  floorBalance: bigint; upsideBalance: bigint;
+  redeemable: bigint; floorClaimable: bigint; upsideClaimable: bigint;
+};
 
 /**
  * Read every series a page at a time. The lens's one-shot `allSeries` walks the whole list in a
@@ -36,6 +65,3 @@ export async function readPositions(holder: `0x${string}`): Promise<Position[]> 
 
 /** A settled series whose halves have all been claimed has nothing left to show anyone. */
 export const isFinished = (s: SeriesView) => s.status === 3 && s.halfSupply === 0n;
-
-export const findSeries = (rows: SeriesView[] | null, address?: string) =>
-  rows?.find((s) => s.series.toLowerCase() === address?.toLowerCase());
