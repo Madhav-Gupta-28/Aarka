@@ -40,7 +40,7 @@ The six-hour window this replaced stranded one-half holders on quiet closes; see
 ## Tests
 
 ```
-forge test --no-match-path "test/{Fork,XLayerFork}.t.sol"   # 210 tests
+forge test --no-match-path "test/{Fork,XLayerFork}.t.sol"   # 213 tests
 forge test --match-path test/Fork.t.sol --fork-url robinhood   # against the live Chainlink feed
 forge coverage --no-match-coverage "test|script"
 ```
@@ -70,7 +70,7 @@ so the deploy ships stand-ins for both; Uniswap v4 is already there at its mainn
 
 Live on Robinhood Chain testnet with fifteen open series on NVDA and TSLA, priced by the real
 mainnet Chainlink feeds. Every series has a market — a pool for each half and its own parity hook —
-and all 70 contracts in the live deployment are verified on the explorer. Reviewed three times, plus a
+and all 70 contracts in the live deployment are verified on the explorer. Reviewed four times, plus a
 finding caught in manual end-to-end testing; findings and fixes are in
 [`AUDIT.md`](./AUDIT.md). See
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) section 15 for what still stands between this and mainnet.

@@ -9,7 +9,7 @@ import {GearAnim, Relic} from "@/components/Relic";
 import {SplitMissing} from "@/components/SplitBits";
 import {FEE_TEXT, useAction} from "@/lib/actions";
 import {quoteFor, useBalances, useOneSeries, useParityAll, useSeries} from "@/lib/data";
-import {cleanAmount, endShort, money, plural, qty, stockName} from "@/lib/format";
+import {cleanAmount, endShort, money, plural, qty, stockName, lineLabel} from "@/lib/format";
 import {RELIC} from "@/lib/relics";
 import {explorerTx} from "@/lib/tx";
 import {spot} from "@/lib/ui";
@@ -39,7 +39,7 @@ function SplitFlow() {
   if (!s || !q) return <div className="page"><SplitMissing loading={isLoading} /></div>;
 
   const name = stockName(s.underlyingSymbol);
-  const K = Math.round(q.strike);
+  const K = lineLabel(q.strike);
   const n = a.n;
   const pl = (w: string) => plural(n, w);
   const err = !!a.err || n <= 0;

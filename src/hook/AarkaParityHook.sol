@@ -271,7 +271,22 @@ contract AarkaParityHook is IHooks, Ownable {
 
         uint256 profit = _profit();
         _donate(triggerKey, profit);
+
+        // Every leg must have closed. An exact-output leg that ran out of reachable liquidity still
+        // lets `take` pull the full size from the PoolManager's balance, which counts tokens held for
+        // every pool and anything sent to it directly, so the hook can end here owing a half it never
+        // paid for. Left alone that debt surfaces as CurrencyNotSettled at the end of the trader's
+        // unlock, outside the try/catch, and reverts their swap. Reverting here instead unwinds the
+        // arb and leaves the trade alone (AUDIT-28).
+        _requireFlat(underlyingCurrency);
+        _requireFlat(floorCurrency);
+        _requireFlat(upsideCurrency);
+        _requireFlat(quote);
         emit ParityRestored(halvesOverpriced, size, profit);
+    }
+
+    function _requireFlat(Currency c) private view {
+        if (poolManager.currencyDelta(address(this), c) != 0) revert UnexpectedDelta();
     }
 
     /// @dev Halves are dear: buy the underlying, split it, sell both halves.

@@ -644,7 +644,75 @@ and the one every donating v4 hook makes. Honest LPs cannot withdraw within an h
 | `registerAsset` can be front-run by `createSeries` | Owner action; a series opened on a retiring feed is visible and avoidable |
 | Router accepts any pool containing the sold half | Only the caller's own funds are at risk; an integrator calling it for a user should pin the pool |
 
+---
+
+## Fourth review, 29 September
+
+A final end-to-end pass: every contract line, the router, the scripts and keeper, and the site's
+integration layer, read against the deployed testnet state and each other. One contract finding,
+two integration findings, and two site defects; all fixed. The rest were checked and found sound.
+
+### AUDIT-28 · Low · A partial arb fill could revert the trader's swap
+
+The redeem arb buys each half with an exact-output swap and then `take`s the full size. `take`
+draws on the PoolManager's balance of the whole currency, not the pool's, so when the hooked pool's
+reachable liquidity runs out first, the take still succeeds and the hook is left owing the
+difference. `_profit` read only the quote currency, which the unpaid halves made look better, so the
+arb returned normally and the debt surfaced as `CurrencyNotSettled` at the end of the trader's
+unlock — outside the try/catch. The trader's own swap reverted.
+
+It needs concentrated liquidity in the hooked pool and more of the half in the PoolManager than that
+pool can reach; the second is free to arrange, by sending tokens to the PoolManager or holding them in
+any other pool. The testnet pools are all full range, where the `reserve / 2` cap makes an
+exact-output leg always fill, so nothing deployed was exposed. On a mainnet market with ordinary
+concentrated LPs it would have been a way to block trading.
+
+**Fix.** `restoreParity` requires the hook's delta in all four currencies to be zero before it
+returns, so a partial fill reverts inside the try/catch and the trade goes through untouched.
+`test_AUDIT28_aPartialFillNeverRevertsTheTradersSwap` reproduces it, and failed before the fix.
+
+### AUDIT-29 · Medium · The keeper runs every few hours, not every thirty minutes
+
+GitHub runs scheduled workflows on a best-effort basis. Over the last forty runs of
+`mirror-feeds.yml` the gap was never under 128 minutes, with a median of four hours, against a
+thirty-minute schedule. Two things follow.
+
+- **The mirror dropped rounds.** It copied only the newest mainnet round each run. The equity feeds
+  publish on every 0.5% move and trade overnight, so at an expiry the last pre-close round was
+  routinely overwritten by an overnight one before the keeper ran, and a testnet series would have
+  settled on a price hours older than the close. `mirror-feeds.sh` now walks back to the last
+  mirrored round and pushes every one it missed, oldest first. Measured on 29 September: 26 NVDA
+  rounds in the preceding 48 hours, where the old script would have copied a handful.
+- **The sequencer feed reads down most of the time.** It fails closed after `MAX_REPORT_AGE`, 100
+  minutes, so with a four-hour keeper the three 06 NOV series that carry it can only settle through
+  the normal path in the window after each run. Funds are never at risk — the late path opens a
+  week after expiry — but the fix is operational: run the keeper somewhere that keeps time,
+  `LOOP=1800 ./script/mirror-feeds.sh` on any always-on host. The twelve older series carry no
+  sequencer feed and are unaffected.
+
+### Site
+
+- **Every refused transaction was reported as "not enough ETH".** Any revert caught while the
+  wallet estimated gas carries the word "gas" in its message, and the error text matched on it.
+  Every call is now simulated before the wallet opens, the ABIs carry the contracts' custom errors,
+  and each refusal is explained by name — `SequencerDown`, `ClaimsLocked`, `FaucetCooldown` and the
+  rest — with no fee paid and no wallet prompt for a call the chain would refuse.
+- **Strikes were rounded to the dollar in labels.** The factory accepts any whole-cent strike, so a
+  $212.50 split would have been labelled $213 across the site. Labels now print the strike as written.
+
+### Checked and sound
+
+Solvency and the payout identity (5 invariants, 2.25 million random calls); settlement's round
+pinning, lookback, late path and challenge; claims rounding down; token mint and burn reachable only
+from the series; the factory's feed registry reaching no existing series; the router pulling only
+from `msg.sender`, returning unsold halves and holding nothing between calls; the hook's reentrancy
+flag, self-call isolation, sign-checked settlement and wired-pool check; no key in any commit.
+
+Stated rather than fixed, because they are properties of the testnet stand-ins: the testnet feeds
+and the sequencer feed are single-key contracts, so the keeper key can publish any price, backdated,
+and settle a testnet series with it. On mainnet the feeds are Chainlink's.
+
 ```
-210 unit, fuzz and invariant tests, all passing
+213 unit, fuzz and invariant tests, all passing
 7 fork tests against Robinhood Chain mainnet, 3 against X Layer, 2 against the testnet, all passing
 ```

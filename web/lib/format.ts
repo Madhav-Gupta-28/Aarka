@@ -121,3 +121,12 @@ export function cleanAmount(s: string, dp = 6) {
   const [a, ...b] = t.split(".");
   return b.length ? `${a}.${b.join("").slice(0, dp)}` : a;
 }
+
+/**
+ * A strike as it is written on the split: "210" for $210.00, "212.50" for $212.50. The factory
+ * accepts any whole-cent strike, and rounding one to the dollar would label a $212.50 split as $213.
+ */
+export function lineLabel(strike: number) {
+  const cents = Math.round(strike * 100);
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+}

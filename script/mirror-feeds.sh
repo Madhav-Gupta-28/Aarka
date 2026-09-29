@@ -26,6 +26,10 @@ FEEDS=(
 )
 
 ROUND_SIG='latestRoundData()(uint80,int256,uint256,uint256,uint80)'
+ROUND_DATA_SIG='getRoundData(uint80)(uint80,int256,uint256,uint256,uint80)'
+# How many missed rounds one run will copy across. A day of 0.5% moves on a volatile stock is well
+# under this.
+MAX_BACKFILL="${MAX_BACKFILL:-60}"
 
 # Aarka's stopgap sequencer uptime feed. Chainlink publishes none for Robinhood Chain, so this
 # keeper is what keeps the guard alive. Reporting nothing reads as down, not as up, so a keeper
@@ -52,7 +56,7 @@ mirror_once() {
 
     # Fields come back one per line: roundId, answer, startedAt, updatedAt, answeredInRound.
     main=$(cast call "$mainnet" "$ROUND_SIG" --rpc-url "$MAINNET_RPC" | awk '{print $1}')
-    answer=$(sed -n 2p <<<"$main")
+    id=$(sed -n 1p <<<"$main")
     main_at=$(sed -n 4p <<<"$main")
     test_at=$(cast call "$testnet" "$ROUND_SIG" --rpc-url "$TESTNET_RPC" | awk '{print $1}' | sed -n 4p)
 
@@ -61,11 +65,30 @@ mirror_once() {
       continue
     fi
 
-    price=$(python3 -c "print(f'{$answer/1e8:.2f}')")
-    tx=$(cast send "$testnet" "pushRoundAt(int256,uint256)" "$answer" "$main_at" \
-      --rpc-url "$TESTNET_RPC" --private-key "$PRIVATE_KEY" --json \
-      | python3 -c "import json,sys; print(json.load(sys.stdin)['transactionHash'])")
-    echo "$(date -u +%FT%TZ) $ticker \$$price at $main_at  $tx"
+    # Every round mainnet published since the last one mirrored, not only the newest. The keeper
+    # runs every few hours in practice, and a stock that trades overnight publishes after the close,
+    # so copying only the latest round would drop the last price before an expiry and settle the
+    # testnet series on an older one. Walk back until the testnet's latest, then push oldest first.
+    # A phase boundary makes the previous id revert; the walk stops there.
+    rounds=()
+    while [ "${#rounds[@]}" -lt "$MAX_BACKFILL" ]; do
+      r=$(cast call "$mainnet" "$ROUND_DATA_SIG" "$id" --rpc-url "$MAINNET_RPC" 2>/dev/null | awk '{print $1}') || break
+      at=$(sed -n 4p <<<"$r")
+      [ -n "$at" ] && [ "$at" -gt "$test_at" ] || break
+      rounds=("$(sed -n 2p <<<"$r") $at" ${rounds[@]+"${rounds[@]}"})
+      # Round ids are (phase << 64) | round, past what bash arithmetic holds, so step in python.
+      id=$(python3 -c "print($id - 1 if $id & 0xFFFFFFFFFFFFFFFF > 1 else '')")
+      [ -n "$id" ] || break
+    done
+
+    for pair in ${rounds[@]+"${rounds[@]}"}; do
+      read -r answer at <<<"$pair"
+      price=$(python3 -c "print(f'{$answer/1e8:.2f}')")
+      tx=$(cast send "$testnet" "pushRoundAt(int256,uint256)" "$answer" "$at" \
+        --rpc-url "$TESTNET_RPC" --private-key "$PRIVATE_KEY" --json \
+        | python3 -c "import json,sys; print(json.load(sys.stdin)['transactionHash'])")
+      echo "$(date -u +%FT%TZ) $ticker \$$price at $at  $tx"
+    done
   done
 }
 

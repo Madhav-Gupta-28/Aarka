@@ -9,7 +9,7 @@ import {astroFrac} from "@/components/SplitBits";
 import {useCollect} from "@/lib/collect";
 import {quoteFor, useParityAll, usePositions, useSeries, valuePosition} from "@/lib/data";
 import type {Position, SeriesView} from "@/lib/lens";
-import {endCode, endShort, money, n18, n8, nowSec, plural, qty, stockName} from "@/lib/format";
+import {endCode, endShort, money, n18, n8, nowSec, plural, qty, stockName, lineLabel} from "@/lib/format";
 import {RELIC} from "@/lib/relics";
 import {explorerTx} from "@/lib/tx";
 import {spot, usePrefs, useReceipts} from "@/lib/ui";
@@ -172,7 +172,7 @@ function HoldRow({x, delay}: {x: Held; delay: number}) {
         <Relic name="tablet" size={64} />
         <div className="stack gap-8">
           <strong className="display" style={{fontSize: 30, lineHeight: 1}}>{name} split</strong>
-          <span className="label" style={{fontSize: 13}}>${Math.round(q.strike)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
+          <span className="label" style={{fontSize: 13}}>${lineLabel(q.strike)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
           <span className="row gap-8 mono" style={{fontSize: 13, color: "var(--text-2)"}}><Relic src={RELIC.astro(astroFrac(s.expiry))} size={24} />{s.status === 0 ? `Ends in ${days} ${plural(days, "day")}` : "Ended"}</span>
         </div>
         <div className="stack gap-8">

@@ -14,7 +14,7 @@ import {ChartLegend, PayoffChart, PresetChips, WhatIfTrack, outcomeText, payoff,
 import type {Kind} from "@/lib/actions";
 import {marketFor} from "@/lib/contracts";
 import {quoteFor, useBalances, useOneSeries, useParityAll, useSeries} from "@/lib/data";
-import {ago, countdown, countdownWords, delta, endLong, endShort, money, short, stockFull, stockMono, stockName} from "@/lib/format";
+import {ago, countdown, countdownWords, delta, endLong, endShort, money, short, stockFull, stockMono, stockName, lineLabel} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
 import {RELIC} from "@/lib/relics";
 import {spot, usePrefs} from "@/lib/ui";
@@ -36,7 +36,7 @@ export default function SplitDetail() {
   if (!s || !q) return <Shell><SplitMissing loading={isLoading} /></Shell>;
 
   const name = stockName(s.underlyingSymbol);
-  const K = Math.round(q.strike);
+  const K = lineLabel(q.strike);
   const p = parity?.[s.series.toLowerCase()];
   const fair = p ? p.gapBps < p.minDeviationBps : true;
   const tag = q.source === "market" ? "MARKET PRICE" : "ESTIMATE";

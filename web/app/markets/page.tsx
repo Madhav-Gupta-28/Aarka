@@ -7,7 +7,7 @@ import {Relic, Reveal} from "@/components/Relic";
 import {SeriesStamp, astroFrac} from "@/components/SplitBits";
 import {quoteFor, stocksOf, useParityAll, useSeries, type Quote} from "@/lib/data";
 import type {SeriesView} from "@/lib/lens";
-import {endCode, endShort, money, n8, nowSec, plural, stockMono, stockName} from "@/lib/format";
+import {endCode, endShort, money, n8, nowSec, plural, stockMono, stockName, lineLabel} from "@/lib/format";
 import {RELIC} from "@/lib/relics";
 import {spot, usePrefs} from "@/lib/ui";
 
@@ -187,7 +187,7 @@ export default function Markets() {
 function SplitCard({r, delay}: {r: Row; delay: number}) {
   const {s, q} = r;
   const name = stockName(s.underlyingSymbol);
-  const lt = `$${Math.round(q.strike)}`;
+  const lt = `$${lineLabel(q.strike)}`;
   const pct = ((q.strike - q.spot) / (q.spot || 1)) * 100;
   const open = s.status === 0;
   const note = !open ? "This split has ended. Put pairs back together, or collect once the final price is set."

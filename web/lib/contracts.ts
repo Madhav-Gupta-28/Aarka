@@ -118,6 +118,12 @@ export const ROUTER_ABI = [
      {name: "zeroForOne", type: "bool"}, {name: "amountIn", type: "uint256"},
      {name: "minAmountOut", type: "uint256"}, {name: "to", type: "address"}],
    outputs: [{name: "amountOut", type: "uint256"}]},
+  // Custom errors, so a refused call can say why instead of "reverted".
+  {type: "error", name: "NotASeries", inputs: []}, {type: "error", name: "PoolDoesNotTradeThisHalf", inputs: []}, {type: "error", name: "NativeCurrencyUnsupported", inputs: []},
+  {type: "error", name: "InvalidAmount", inputs: []}, {type: "error", name: "ZeroAddress", inputs: []}, {type: "error", name: "UnexpectedDelta", inputs: []},
+  {type: "error", name: "InsufficientOutput", inputs: [{type: "uint256"}, {type: "uint256"}]},
+  {type: "error", name: "ERC20InsufficientBalance", inputs: [{type: "address"}, {type: "uint256"}, {type: "uint256"}]},
+  {type: "error", name: "ERC20InsufficientAllowance", inputs: [{type: "address"}, {type: "uint256"}, {type: "uint256"}]},
 ] as const;
 
 /** The pool trading `asset` against USDG, carrying that series' parity hook. */
@@ -151,6 +157,16 @@ export const SERIES_ABI = [
    outputs: [{type: "uint64"}]},
   {type: "function", name: "CHALLENGE_PERIOD", stateMutability: "view", inputs: [],
    outputs: [{type: "uint256"}]},
+  // Custom errors, so a refused call can say why instead of "reverted".
+  {type: "error", name: "ZeroAmount", inputs: []}, {type: "error", name: "ZeroAddress", inputs: []}, {type: "error", name: "Expired", inputs: []},
+  {type: "error", name: "NotExpired", inputs: []}, {type: "error", name: "AlreadySettled", inputs: []}, {type: "error", name: "NotSettled", inputs: []},
+  {type: "error", name: "InvalidPrice", inputs: []}, {type: "error", name: "IncompleteRound", inputs: []}, {type: "error", name: "RoundAfterExpiry", inputs: []},
+  {type: "error", name: "RoundTooOld", inputs: []}, {type: "error", name: "LaterRoundExists", inputs: []}, {type: "error", name: "NotAnImprovement", inputs: []},
+  {type: "error", name: "ChallengeWindowClosed", inputs: []}, {type: "error", name: "ClaimsLocked", inputs: []}, {type: "error", name: "UnexpectedFeedDecimals", inputs: []},
+  {type: "error", name: "OraclePaused", inputs: []}, {type: "error", name: "SequencerDown", inputs: []}, {type: "error", name: "SequencerGracePeriod", inputs: []},
+  {type: "error", name: "RoundIdOverflow", inputs: []}, {type: "error", name: "CorporateActionBeforeExpiry", inputs: []},
+  {type: "error", name: "ERC20InsufficientBalance", inputs: [{type: "address"}, {type: "uint256"}, {type: "uint256"}]},
+  {type: "error", name: "ERC20InsufficientAllowance", inputs: [{type: "address"}, {type: "uint256"}, {type: "uint256"}]},
 ] as const;
 
 export const HOOK_LENS_ABI = [
@@ -193,6 +209,7 @@ export const TOKEN_ABI = [
    inputs: [{name: "a", type: "address"}], outputs: [{type: "uint256"}]},
   {type: "function", name: "mint", stateMutability: "nonpayable",
    inputs: [{name: "to", type: "address"}, {name: "amount", type: "uint256"}], outputs: []},
+  {type: "error", name: "FaucetCooldown", inputs: [{name: "availableAt", type: "uint256"}]},
 ] as const;
 
 export enum Status { Open, Expired, Challenging, Claimable }

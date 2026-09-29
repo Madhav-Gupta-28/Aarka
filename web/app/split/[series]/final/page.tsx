@@ -11,7 +11,7 @@ import {SplitMissing} from "@/components/SplitBits";
 import {useCollect} from "@/lib/collect";
 import {SERIES_ABI} from "@/lib/contracts";
 import {quoteFor, useBalances, useOneSeries, useParityAll, useSeries} from "@/lib/data";
-import {endLong, endShort, endTime, money, n18, n8, plural, qty, stockName} from "@/lib/format";
+import {endLong, endShort, endTime, money, n18, n8, plural, qty, stockName, lineLabel} from "@/lib/format";
 import {RELIC} from "@/lib/relics";
 import {findSettlementRound, type Candidate} from "@/lib/settle";
 import {explorerTx, useTx} from "@/lib/tx";
@@ -97,7 +97,7 @@ export default function FinalPrice() {
                 <div className="stack gap-10" style={{padding: 22}}>
                   <span className="row gap-10 mono" style={{fontSize: 13, letterSpacing: ".08em"}}><Relic name="coinUp" size={32} />EACH UPSIDE PAYS</span>
                   <span className="num gold" style={{fontSize: 44, lineHeight: 1}}>{money(Math.max(c.px - K, 0))}</span>
-                  <span className="small">{c.px > K ? `${money(c.px)} minus the ${money(K, 0)} line.` : "Nothing, because nothing ended above the line."}</span>
+                  <span className="small">{c.px > K ? `${money(c.px)} minus the $${lineLabel(K)} line.` : "Nothing, because nothing ended above the line."}</span>
                 </div>
               </div>
               {phase === "confirming" ? (

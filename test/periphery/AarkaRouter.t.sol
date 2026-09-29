@@ -7,10 +7,16 @@ import {AarkaSeries} from "../../src/AarkaSeries.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
+import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
+import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {MockStockToken} from "../mocks/MockStockToken.sol";
 
 /// @notice The one-transaction product flow, against the same hooked pools the parity tests use.
 contract AarkaRouterTest is HookBaseTest {
+    using PoolIdLibrary for PoolKey;
+    using StateLibrary for IPoolManager;
+
     AarkaRouter router;
     address holder = makeAddr("holder");
 
@@ -125,5 +131,51 @@ contract AarkaRouterTest is HookBaseTest {
         vm.expectRevert();
         router.swapExactIn(upsideKey, _isZero(upsideKey, address(usdg)), 350e6, 0, thief);
         assertEq(usdg.balanceOf(holder), 100_000e6, "holder untouched");
+    }
+
+    /// @notice A pool too thin for the whole sale fills partly. The seller keeps what did not
+    ///         sell, pays only for what did, and the router is left holding nothing.
+    function test_aPartialFillReturnsTheUnsoldHalvesAndLeavesTheRouterEmpty() public {
+        PoolKey memory thin = PoolKey({
+            currency0: upsideKey.currency0, currency1: upsideKey.currency1, fee: 500, tickSpacing: 10,
+            hooks: IHooks(address(0))
+        });
+        manager.initialize(thin, _sqrtPrice(thin, address(u), P_UPSIDE));
+        (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(thin.toId());
+        int24 lower = (tick / 10) * 10 - 20;
+
+        vm.prank(lp);
+        u.approve(address(liquidityRouter), type(uint256).max);
+        vm.prank(lp);
+        liquidityRouter.modifyLiquidity(
+            thin, IPoolManager.ModifyLiquidityParams({tickLower: lower, tickUpper: lower + 40, liquidityDelta: 1e12, salt: 0}), ""
+        );
+
+        vm.prank(holder);
+        uint256 cash = router.splitAndSell(series, true, 10e18, thin, 0, holder);
+
+        uint256 unsold = u.balanceOf(holder);
+        assertGt(unsold, 0, "the pool could not take all ten");
+        assertLt(unsold, 10e18, "but it took some");
+        assertGt(cash, 0, "and paid for what it took");
+        assertEq(f.balanceOf(holder), 10e18, "the kept half is whole");
+
+        assertEq(nvda.balanceOf(address(router)), 0);
+        assertEq(f.balanceOf(address(router)), 0);
+        assertEq(u.balanceOf(address(router)), 0);
+        assertEq(usdg.balanceOf(address(router)), 0);
+    }
+
+    function test_refusesNativeCurrencyPools() public {
+        PoolKey memory native = PoolKey({
+            currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(u)), fee: 3000, tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
+        vm.prank(holder);
+        vm.expectRevert(AarkaRouter.NativeCurrencyUnsupported.selector);
+        router.swapExactIn(native, true, 1e18, 0, holder);
+        vm.prank(holder);
+        vm.expectRevert(AarkaRouter.NativeCurrencyUnsupported.selector);
+        router.splitAndSell(series, true, 1e18, native, 0, holder);
     }
 }

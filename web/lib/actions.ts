@@ -7,7 +7,7 @@ import {robinhoodTestnet} from "./chain";
 import {ADDRESSES, ROUTER_ABI, SERIES_ABI, TOKEN_ABI, hookedPoolKey, marketFor} from "./contracts";
 import type {Balances, Quote} from "./data";
 import type {SeriesView} from "./lens";
-import {endShort, money, n18, n6, parseAmount, plural, qty, stockName} from "./format";
+import {endShort, money, n18, n6, parseAmount, plural, qty, stockName, lineLabel} from "./format";
 import {useTx} from "./tx";
 
 /**
@@ -38,7 +38,7 @@ export function useAction({s, q, bal, kind, piece, amount}: {
 
   const hook = s ? marketFor(s.series) : undefined;
   const name = s ? stockName(s.underlyingSymbol) : "";
-  const K = q ? Math.round(q.strike) : 0;
+  const K = q ? lineLabel(q.strike) : "";
   const n = parseAmount(amount);
   const pl = (w: string) => plural(n, w);
   const pieceName = piece === "floor" ? "Floor" : "Upside";

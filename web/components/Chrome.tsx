@@ -6,7 +6,7 @@ import {useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
 import {useAccount, useConnect, useDisconnect, useSwitchChain} from "wagmi";
 import {robinhoodTestnet} from "@/lib/chain";
 import {quoteFor, stocksOf, useParityAll, useSeries} from "@/lib/data";
-import {endCode, money, short} from "@/lib/format";
+import {endCode, money, short, lineLabel} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
 import {usePrefs, useReducedMotion} from "@/lib/ui";
 import {Mark} from "./Mark";
@@ -190,7 +190,7 @@ export function PriceStrip() {
       const q = quoteFor(r, parity);
       return (
         <span className="item" key={r.series}>
-          <b>{r.underlyingSymbol} ${Math.round(q.strike)} {endCode(r.expiry)}</b>
+          <b>{r.underlyingSymbol} ${lineLabel(q.strike)} {endCode(r.expiry)}</b>
           <span className="muted">FLOOR</span><span className="px">{money(q.floor)}</span>
           <span className="muted">UPSIDE</span><span className="px">{money(q.upside)}</span>
         </span>
