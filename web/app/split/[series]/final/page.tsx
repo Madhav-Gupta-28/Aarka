@@ -34,7 +34,7 @@ export default function FinalPrice() {
   const f = n18(bal?.floor ?? 0n), u = n18(bal?.upside ?? 0n);
   const holds = [f ? `${qty(f)} ${plural(f, "Floor")}` : "", u ? `${qty(u)} ${plural(u, "Upside")}` : ""].filter(Boolean).join(" and ");
   const phase = collected ? "done" : s.status === 0 ? "before" : s.status === 1 ? "waiting" : s.status === 2 ? "confirming" : "set";
-  const badge = {before: ["ENDS " + endShort(s.expiry).toUpperCase(), "stamp-ended"], waiting: ["SETTING THE PRICE", "stamp-sun"], confirming: ["FINAL PRICE SET", "stamp-final"], set: ["READY TO COLLECT", "stamp-final"], done: ["COLLECTED", "stamp-live"]}[phase];
+  const badge = {before: ["ENDS " + endShort(s.expiry).toUpperCase(), "stamp-ended"], waiting: ["SETTING THE PRICE", "stamp-sun"], confirming: ["FINAL PRICE SET", "stamp-final"], set: [holds ? "READY TO COLLECT" : "FINAL PRICE SET", "stamp-final"], done: ["COLLECTED", "stamp-live"]}[phase];
 
   async function collect() {
     const snap = {total: c.total, floor: c.floorUsd, upside: c.upsideUsd};
