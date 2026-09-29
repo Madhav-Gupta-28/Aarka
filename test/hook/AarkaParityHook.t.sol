@@ -20,10 +20,12 @@ contract AarkaParityHookTest is HookBaseTest {
         assertLt(parityGapBps(), 10, "pools should initialise at parity");
     }
 
-    /// @dev 0x40 is AFTER_SWAP_FLAG. Any other bit set would make v4 call an entry point that
-    ///      reverts, so the constructor asserts this rather than trusting the deploy script.
-    function test_hookAddressCarriesOnlyTheAfterSwapFlag() public view {
-        assertEq(uint160(address(hook)) & 0x3FFF, 0x40);
+    /// @dev 0x640 is afterSwap, afterAddLiquidity and beforeRemoveLiquidity. Any other bit set
+    ///      would make v4 call an entry point that reverts, so the constructor asserts this rather
+    ///      than trusting the deploy script.
+    function test_hookAddressCarriesExactlyItsThreeFlags() public view {
+        assertEq(uint160(address(hook)) & 0x3FFF, 0x640);
+        assertEq(hook.PERMISSIONS(), 0x640);
     }
 
     function test_wiringIsOneWay() public {
@@ -248,10 +250,6 @@ contract AarkaParityHookTest is HookBaseTest {
         vm.expectRevert(err);
         hook.beforeAddLiquidity(address(this), floorKey, mp, "");
         vm.expectRevert(err);
-        hook.afterAddLiquidity(address(this), floorKey, mp, zero, zero, "");
-        vm.expectRevert(err);
-        hook.beforeRemoveLiquidity(address(this), floorKey, mp, "");
-        vm.expectRevert(err);
         hook.afterRemoveLiquidity(address(this), floorKey, mp, zero, zero, "");
         vm.expectRevert(err);
         hook.beforeSwap(address(this), floorKey, sp, "");
@@ -288,19 +286,55 @@ contract AarkaParityHookTest is HookBaseTest {
     /// @notice A pool with no liquidity has no price to solve against, so the arb must decline
     ///         rather than divide by zero.
     function test_solverDeclinesWhenAPoolIsEmpty() public {
-        PoolKey memory empty = _key(address(f), address(usdg), IHooks(address(hook)));
-        empty.fee = 500; // a different, uninitialised pool
-        empty.tickSpacing = 10;
-        manager.initialize(empty, _sqrtPrice(empty, address(f), P_FLOOR));
-
+        // A second hook, wired to pools that name it: a liquid floor pool, and an upside pool that
+        // is initialised but holds nothing, so any arb it sizes has nowhere to trade.
         AarkaParityHook fresh = _mineAndDeploy();
+        PoolKey memory fFresh = _key(address(f), address(usdg), IHooks(address(fresh)));
+        PoolKey memory uEmpty = _key(address(u), address(usdg), IHooks(address(fresh)));
+        manager.initialize(fFresh, _sqrtPrice(fFresh, address(f), P_FLOOR));
+        manager.initialize(uEmpty, _sqrtPrice(uEmpty, address(u), P_UPSIDE));
+        vm.prank(lp);
+        _addLiquidity(fFresh);
+
         vm.startPrank(owner);
-        fresh.wire(underlyingKey, empty, upsideKey);
+        fresh.wire(underlyingKey, fFresh, uEmpty);
         fresh.setParams(1, 100_000e18);
         vm.stopPrank();
-        // No liquidity in `empty`, so any swap that reaches the hook must not revert the swap.
-        _buyFloor(10_000e6);
-        assertGt(f.balanceOf(trader), 0);
+
+        uint256 before = f.balanceOf(trader);
+        _swap(fFresh, !_assetIsZero(fFresh, address(f)), -int256(uint256(10_000e6)));
+        assertGt(f.balanceOf(trader), before, "the swap fills; the hook simply declines");
+    }
+
+    /// @notice The two halves' pools must name this hook, or their swaps would never reach it.
+    function test_wiringRejectsAPoolThatDoesNotCarryTheHook() public {
+        AarkaParityHook fresh = _mineAndDeploy();
+        vm.prank(owner);
+        vm.expectRevert(AarkaParityHook.PoolMismatch.selector);
+        fresh.wire(underlyingKey, floorKey, upsideKey); // these name the other hook
+    }
+
+    /// @notice An uninitialised pool prices at zero; wiring one would break every later arb.
+    function test_wiringRejectsAnUninitialisedPool() public {
+        AarkaParityHook fresh = _mineAndDeploy();
+        PoolKey memory fFresh = _key(address(f), address(usdg), IHooks(address(fresh)));
+        PoolKey memory uFresh = _key(address(u), address(usdg), IHooks(address(fresh)));
+        manager.initialize(fFresh, _sqrtPrice(fFresh, address(f), P_FLOOR));
+        vm.prank(owner);
+        vm.expectRevert(AarkaParityHook.PoolNotInitialised.selector);
+        fresh.wire(underlyingKey, fFresh, uFresh);
+    }
+
+    /// @notice Only the PoolManager can drive the liquidity callbacks, so nobody can reset a
+    ///         position's clock or read the gate as open by calling them directly.
+    function test_liquidityCallbacksAreManagerOnly() public {
+        IPoolManager.ModifyLiquidityParams memory mp =
+            IPoolManager.ModifyLiquidityParams({tickLower: 0, tickUpper: 60, liquidityDelta: 0, salt: 0});
+        BalanceDelta zero = BalanceDelta.wrap(0);
+        vm.expectRevert(AarkaParityHook.NotPoolManager.selector);
+        hook.afterAddLiquidity(address(this), floorKey, mp, zero, zero, "");
+        vm.expectRevert(AarkaParityHook.NotPoolManager.selector);
+        hook.beforeRemoveLiquidity(address(this), floorKey, mp, "");
     }
 
     /// @notice Below the deviation threshold the hook must decline before doing any work at all.

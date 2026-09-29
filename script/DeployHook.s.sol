@@ -128,7 +128,7 @@ contract DeployHook is Script {
         console.log("TestUSDG              ", address(usdg));
         console.log("AarkaParityHook       ", address(hook));
         console.log("  low 14 bits         ", uint160(address(hook)) & Hooks.ALL_HOOK_MASK);
-        console.log("  AFTER_SWAP_FLAG     ", uint160(Hooks.AFTER_SWAP_FLAG));
+        console.log("  permission bits     ", uint160(Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG));
         console.log("liquidity router      ", address(router));
         console.log("series                ", address(series));
     }
@@ -141,7 +141,10 @@ contract DeployHook is Script {
 
         bytes memory args = abi.encode(manager, series, Currency.wrap(address(usdg)), deployer);
         (address expected, bytes32 salt) = HookMiner.find(
-            CREATE2_DEPLOYER, uint160(Hooks.AFTER_SWAP_FLAG), type(AarkaParityHook).creationCode, args
+            CREATE2_DEPLOYER,
+            uint160(Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG),
+            type(AarkaParityHook).creationCode,
+            args
         );
         hook = new AarkaParityHook{salt: salt}(
             manager, series, Currency.wrap(address(usdg)), deployer

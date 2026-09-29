@@ -93,12 +93,29 @@ contract UnsettledInputForkTest is Test {
     /// @dev The hook is put back at its mined address with the fixed code. Storage survives the
     ///      etch, so the pools stay wired and the params stay as they are on chain — only the
     ///      sizing changes.
+    ///
+    ///      The current constructor asserts the address carries all of `PERMISSIONS` (AUDIT-27), and
+    ///      the deployed hook was mined for AFTER_SWAP_FLAG alone, so the code is built at a scratch
+    ///      address with the right bits and its runtime copied over. Nothing in the constructor
+    ///      reads its own address into an immutable, so the copy is exact, and the added
+    ///      `liquidityAddedAt` mapping sits after every existing slot. v4 still sees only the old
+    ///      address's bits, so the liquidity hold stays dormant here; sizing is all that changes.
+    ///
+    ///      The build runs on a second fork at the latest block: the public RPC keeps no history
+    ///      for accounts it has not already served at this block, and a scratch address is one of
+    ///      those. The constructor only reads the series and its tokens, which have not changed.
     function test_AUDIT24_sizingAgainstTheRealBalanceFixesIt() public {
+        uint256 pinned = vm.activeFork();
+        vm.createSelectFork(vm.rpcUrl("robinhood_testnet"));
+        address scratch = address(uint160(uint256(keccak256("aarka.scratch.hook"))) & ~uint160(0x3FFF) | 0x640);
         deployCodeTo(
             "AarkaParityHook.sol:AarkaParityHook",
             abi.encode(POOL_MANAGER, SERIES, USDG, HOOK_OWNER),
-            HOOK
+            scratch
         );
+        bytes memory fixedCode = scratch.code;
+        vm.selectFork(pinned);
+        vm.etch(HOOK, fixedCode);
 
         _sell();
 

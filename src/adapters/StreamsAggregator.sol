@@ -71,6 +71,15 @@ contract StreamsAggregator is AggregatorV3Interface {
     uint32 private constant STATUS_UNKNOWN = 0;
     uint32 private constant STATUS_CLOSED = 5;
 
+    /// @notice How long after its observation a report may still be recorded.
+    /// @dev Recording is permissionless and reports are ordered by observation time, so without a
+    ///      bound the submitter chooses the history: hold back a favourable signed price, record it
+    ///      once nothing newer is on file, then record any report from after expiry, and the true
+    ///      last price before expiry can never be added. Settlement then pins the held-back one.
+    ///      Ten minutes is what a keeper polling the API needs; a price that old is still inside
+    ///      the final minutes of the session it came from.
+    uint32 public constant MAX_SUBMIT_DELAY = 10 minutes;
+
     struct Round {
         int192 answer; // 8 decimals
         uint32 observedAt;
@@ -95,6 +104,9 @@ contract StreamsAggregator is AggregatorV3Interface {
     error MarketClosed(uint32 marketStatus);
     error NotNewer(uint32 observedAt, uint32 latestObservedAt);
     error InvalidPrice(int192 mid);
+    error ReportNotYetValid(uint32 validFromTimestamp);
+    error ReportExpired(uint32 expiresAt);
+    error ReportTooOld(uint32 observedAt);
     error NoDataPresent();
 
     /// @param feedIds every stream of one instrument: regular, extended and overnight hours.
@@ -113,8 +125,9 @@ contract StreamsAggregator is AggregatorV3Interface {
 
     /// @notice Verify a Data Streams report and append it as a round.
     /// @dev Permissionless, like `settle()` itself. The submitter pays the gas and gets nothing for
-    ///      it, and cannot influence the result: the report is signed, and everything recorded is
-    ///      read out of it.
+    ///      it. The report is signed and everything recorded is read out of it, and it must be
+    ///      recorded within MAX_SUBMIT_DELAY of its observation, so the submitter cannot choose
+    ///      which past price becomes history either.
     /// @param payload the raw payload from the Data Streams API, passed through untouched.
     function submit(bytes calldata payload) external payable returns (uint80 roundId) {
         bytes memory verified = verifierProxy.verify{value: msg.value}(payload, "");
@@ -132,6 +145,15 @@ contract StreamsAggregator is AggregatorV3Interface {
         uint32 latestObservedAt = _rounds[latestRound].observedAt;
         if (report.observationsTimestamp <= latestObservedAt) {
             revert NotNewer(report.observationsTimestamp, latestObservedAt);
+        }
+
+        // A report carries its own validity window, and the verifier checks only the signature.
+        if (block.timestamp < report.validFromTimestamp) revert ReportNotYetValid(report.validFromTimestamp);
+        if (block.timestamp > report.expiresAt) revert ReportExpired(report.expiresAt);
+        // A future observation is not evidence of anything, and would pass the age check below.
+        if (report.observationsTimestamp > block.timestamp) revert ReportNotYetValid(report.observationsTimestamp);
+        if (block.timestamp - report.observationsTimestamp > MAX_SUBMIT_DELAY) {
+            revert ReportTooOld(report.observationsTimestamp);
         }
 
         roundId = latestRound + 1;

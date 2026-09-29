@@ -149,9 +149,12 @@ contract AarkaSequencerFeedTest is Test {
         seq.report(true);
 
         // Four days pass, and the keeper keeps reporting, as it does every half hour.
+        for (uint256 t = NOW + 30 minutes; t <= EXPIRY + 1; t += 30 minutes) {
+            vm.warp(t);
+            vm.prank(keeper);
+            seq.report(true);
+        }
         vm.warp(EXPIRY + 1);
-        vm.prank(keeper);
-        seq.report(true);
 
         series.settle(200);
         assertTrue(series.settled());
@@ -209,5 +212,42 @@ contract AarkaSequencerFeedTest is Test {
         series.settle(200);
         assertTrue(series.settled());
         assertTrue(series.settledLate(), "settled without the sequencer's blessing");
+    }
+
+    /// @dev AUDIT-26. The keeper goes quiet, readers see "down", and the keeper comes back saying
+    ///      "up". Nobody watched the chain in between, so the status is dated from the report that
+    ///      ended the gap and the grace period runs again. Refreshing the old round instead carried
+    ///      its startedAt forward and let settlement through on the first report after the gap.
+    function test_aReportAfterAGapRestartsTheGracePeriod() public {
+        vm.prank(keeper);
+        seq.report(true);
+
+        vm.warp(EXPIRY + 1);
+        (, int256 during,,,) = seq.latestRoundData();
+        assertEq(during, 1, "readers were told down for the whole gap");
+
+        vm.prank(keeper);
+        uint80 id = seq.report(true);
+        assertEq(id, 2, "a new round, not a refresh of the stale one");
+        (,, uint256 startedAt,,) = seq.latestRoundData();
+        assertEq(startedAt, EXPIRY + 1, "up since the report that ended the gap");
+
+        vm.expectRevert(AarkaSeries.SequencerGracePeriod.selector);
+        series.settle(200);
+
+        vm.warp(block.timestamp + series.SEQUENCER_GRACE_PERIOD() + 1);
+        vm.prank(keeper);
+        seq.report(true);
+        series.settle(200);
+        assertTrue(series.settled());
+    }
+
+    /// @dev Inside MAX_REPORT_AGE an unchanged status still refreshes the round it is in.
+    function test_aTimelyReportStillRefreshes() public {
+        vm.prank(keeper);
+        seq.report(true);
+        vm.warp(NOW + seq.MAX_REPORT_AGE());
+        vm.prank(keeper);
+        assertEq(seq.report(true), 1);
     }
 }
