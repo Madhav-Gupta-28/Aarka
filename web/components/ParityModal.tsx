@@ -31,22 +31,26 @@ const BLOCKS_PER_DAY = 430_000n;
 const HISTORY_DAYS = 4n;
 
 /**
- * The twelve hooks replaced by the 22 Sep redeploy. They are read for history only: what the
- * mechanism has done is a fact about the protocol, not about whichever deployment is current.
+ * Every hook a market has had before its current one: the 15 Sep hooks replaced on 22 Sep, and the
+ * 22 Sep hooks replaced on 29 Sep. They are read for history only: what the mechanism has done is a
+ * fact about the protocol, not about whichever deployment is current.
  */
-const LEGACY_MARKETS: Record<string, `0x${string}`> = {
-  "0xdfb1acfaa87eaf10136242c3f273fe4cea606ac7": "0x533f1ee34100eFF09031D3d5DE802d290dBc0040",
-  "0xbc25a8f80b30622aacfeefa054dc44125c1cd9e7": "0x39aC5d768D0Dd32c1Fd133391308aC638A89c040",
-  "0x46a335b9611d6e542f7dc6339097c90b7804881a": "0x6de83EC68484355746F205B9A822785d7e714040",
-  "0x2b51ed3125cf98262b1c9bf075b81371315c29af": "0xce07DfbeE7254c08E773dd7C04a7A7e444B54040",
-  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": "0x7fbd3d2aA2285cee5014bce41584F1A288C94040",
-  "0x81105a4a2d74cb353655469c815f55d392ceabb7": "0x794bb110Bfb78CEeF57d859FfC29103770478040",
-  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": "0x9b11f7704dAd01428d6D477623696b3821E00040",
-  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": "0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040",
-  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": "0x553f8d548b85b078152A6901fA19bEa19D8a0040",
-  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": "0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040",
-  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": "0x578Ed50250440813887Db1723E8bb8d04F804040",
-  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": "0x3B14541fc6D434CA29a0f5575F0881d7974F0040",
+const LEGACY_MARKETS: Record<string, `0x${string}`[]> = {
+  "0xdfb1acfaa87eaf10136242c3f273fe4cea606ac7": ["0x533f1ee34100eFF09031D3d5DE802d290dBc0040"],
+  "0xbc25a8f80b30622aacfeefa054dc44125c1cd9e7": ["0x39aC5d768D0Dd32c1Fd133391308aC638A89c040"],
+  "0x46a335b9611d6e542f7dc6339097c90b7804881a": ["0x6de83EC68484355746F205B9A822785d7e714040"],
+  "0x2b51ed3125cf98262b1c9bf075b81371315c29af": ["0xce07DfbeE7254c08E773dd7C04a7A7e444B54040"],
+  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": ["0x5e8C54dd0ed38bFb7b610e200FEE4741e6AEc040", "0x7fbd3d2aA2285cee5014bce41584F1A288C94040"],
+  "0x81105a4a2d74cb353655469c815f55d392ceabb7": ["0xF964F74F6c9E9E50024ce3b69d695A0ECd6e4040", "0x794bb110Bfb78CEeF57d859FfC29103770478040"],
+  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": ["0x697e9F586C5cbf2A8b04fc1A3199fe60d16A0040", "0x9b11f7704dAd01428d6D477623696b3821E00040"],
+  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": ["0x1E11c14a6A2EadA61Ca024c1514B2DaFBC7A8040", "0x06a5881b0a358E779b1f9bA81b6d9d64bbea0040"],
+  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": ["0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040", "0x553f8d548b85b078152A6901fA19bEa19D8a0040"],
+  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": ["0x198296A48A6695064d0eb3c6ac384DFfE477C040", "0x086AA3fd893EE5CEcea6eBFaFd5b5dDaa5874040"],
+  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": ["0x18362F957046037EEe5E640067658cd96B338040", "0x578Ed50250440813887Db1723E8bb8d04F804040"],
+  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": ["0x5BD834aad040ca50707Ed5fF69701DE1697f8040", "0x3B14541fc6D434CA29a0f5575F0881d7974F0040"],
+  "0xdf4f52a5158567a357e91ca6e5d39e111dcfbffb": ["0x0a7154C1FdABeCb18f3B7CF216264BDa19e88040"],
+  "0x3c3166b3aaa1fde7349818e7df6d19fc9079f6c0": ["0x7F75Ec34366D6373480c65b983AdEA9310df0040"],
+  "0xb6253f080eca3de2ff6c4c0ad1bcacbad2f3d28b": ["0xF1c210002bFC398dEC493BF5Eeb86B597f4F4040"],
 };
 
 const RESTORED = {
@@ -62,7 +66,7 @@ type Restore = {minted: boolean; size: bigint; profit: bigint; block: bigint; at
 /** Every time this split's hooks, current and retired, closed a gap in the last few days. */
 function useRestores(series: string) {
   const key = series.toLowerCase();
-  const hooks = [MARKETS[key], LEGACY_MARKETS[key]].filter(Boolean) as `0x${string}`[];
+  const hooks = [MARKETS[key], ...(LEGACY_MARKETS[key] ?? [])].filter(Boolean) as `0x${string}`[];
   return useQuery({
     queryKey: ["restores", key],
     enabled: hooks.length > 0,

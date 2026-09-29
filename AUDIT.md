@@ -574,6 +574,8 @@ with the second review above.
 
 None of this changes a deployed contract. Nothing here is upgradeable, so the testnet deployment
 keeps the old code until it is redeployed; the X Layer adapter has not been deployed at all.
+The hook half of it shipped on 29 September, when the eleven open markets were redeployed (see
+the fourth review); the sequencer feed and the router still run the older code.
 
 ### AUDIT-25 · High · A submitter could choose the settlement price on Data Streams
 
@@ -699,6 +701,15 @@ thirty-minute schedule. Two things follow.
   rest — with no fee paid and no wallet prompt for a call the chain would refuse.
 - **Strikes were rounded to the dollar in labels.** The factory accepts any whole-cent strike, so a
   $212.50 split would have been labelled $213 across the site. Labels now print the strike as written.
+
+### Redeployed
+
+The eleven open markets got new hooks on 29 September carrying AUDIT-27 and AUDIT-28, mined for
+permission bits `0x640` and opened at their old markets' prices at 0 bps. All eleven verify on the
+explorer against the current source. A $50k parity trade was rehearsed on a fork first and a real
+$5 trade run through the router afterwards. Deploying them showed that forge's exact gas estimates
+can fall short on this chain, whose L1 data fee moves between simulation and inclusion, so
+`open-markets.py` now asks for twice the estimate.
 
 ### Checked and sound
 

@@ -24,25 +24,26 @@ export const ADDRESSES = {
  * Every series with a market, and the parity hook bound to it. A hook is bound to one series at
  * construction, so each market is its own hook plus a pool for each half. Keys are lowercase.
  *
- * Redeployed 22 Sep 2026 with the AUDIT-24 sizing fix, all fifteen series this time. Every market
- * opened at 0 bps against a stock pool realigned to the mirrored Chainlink price.
+ * The eleven open series were redeployed 29 Sep 2026 with the AUDIT-27 liquidity hold and the
+ * AUDIT-28 settlement check, each opened at its old market's prices so nothing a user sees moved.
+ * The four 25 Sep series have ended and keep the hooks from 22 Sep, which carry the AUDIT-24 fix.
  */
 export const MARKETS: Record<string, `0x${string}`> = {
   "0xdfb1acfaa87eaf10136242c3f273fe4cea606ac7": "0x4A5AFd38edB9B00F8e668c9Ca8270f4696fbC040", // NVDA $210 · 25 Sep
   "0xbc25a8f80b30622aacfeefa054dc44125c1cd9e7": "0x4ED10b89A0c37efDA6d8473A4CB2c81836aB0040", // NVDA $230 · 25 Sep
   "0x46a335b9611d6e542f7dc6339097c90b7804881a": "0xc1c6720e95E70B51Bbb605101273216DEf7a4040", // TSLA $350 · 25 Sep
   "0x2b51ed3125cf98262b1c9bf075b81371315c29af": "0x029E9Fa2ef97c2D56A1DA76eCD089807af2DC040", // TSLA $400 · 25 Sep
-  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": "0x5e8C54dd0ed38bFb7b610e200FEE4741e6AEc040", // NVDA $210 · 2 Oct
-  "0x81105a4a2d74cb353655469c815f55d392ceabb7": "0xF964F74F6c9E9E50024ce3b69d695A0ECd6e4040", // NVDA $230 · 2 Oct
-  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": "0x697e9F586C5cbf2A8b04fc1A3199fe60d16A0040", // TSLA $350 · 2 Oct
-  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": "0x1E11c14a6A2EadA61Ca024c1514B2DaFBC7A8040", // TSLA $400 · 2 Oct
-  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": "0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040", // NVDA $210 · 30 Oct
-  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": "0x198296A48A6695064d0eb3c6ac384DFfE477C040", // NVDA $230 · 30 Oct
-  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": "0x18362F957046037EEe5E640067658cd96B338040", // TSLA $350 · 30 Oct
-  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": "0x5BD834aad040ca50707Ed5fF69701DE1697f8040", // TSLA $400 · 30 Oct
-  "0xdf4f52a5158567a357e91ca6e5d39e111dcfbffb": "0x0a7154C1FdABeCb18f3B7CF216264BDa19e88040", // NVDA $210 · 6 Nov
-  "0x3c3166b3aaa1fde7349818e7df6d19fc9079f6c0": "0x7F75Ec34366D6373480c65b983AdEA9310df0040", // NVDA $230 · 6 Nov
-  "0xb6253f080eca3de2ff6c4c0ad1bcacbad2f3d28b": "0xF1c210002bFC398dEC493BF5Eeb86B597f4F4040", // TSLA $350 · 6 Nov
+  "0xce14497468dfcfba0dfad442af8561d2f956e4e7": "0x78976b4F38e66dFF82bE1C3B35E37ee8428f8640", // NVDA $210 · 2 Oct
+  "0x81105a4a2d74cb353655469c815f55d392ceabb7": "0xc84Dd6ec3f2BC560dAa06648999FE3c39110c640", // NVDA $230 · 2 Oct
+  "0xcc0dde80ce590e2092f00cf5b82016ffd17163f4": "0xe38d9f109E62bf11A438869C5f82d79788940640", // TSLA $350 · 2 Oct
+  "0xcb18e35ec23b9595ca8752d5ffea09cffd5e1a87": "0xcE497F09B3ada431e954cb2b39f9b7684fd18640", // TSLA $400 · 2 Oct
+  "0x7d31f372d747edb24db9242d5e48cf68aa8dbdcf": "0x8870eAd4E4147cE352F1B33943543031a7c80640", // NVDA $210 · 30 Oct
+  "0x13b5ea7eeafcfabef731a97f4410e5db941a4819": "0x6d316696b4c80f71ec66F43Cd8F801D638158640", // NVDA $230 · 30 Oct
+  "0xa34968cdb62a753aff8b3e172a931e1c76706e3e": "0xd41CCb4C5E91b89034e75A44712b5c92B9750640", // TSLA $350 · 30 Oct
+  "0x9f755706bf8d5cdce4bae8e96e0d7b4942536f89": "0xc117478b0b0689E1295E832E72C98cf911e8C640", // TSLA $400 · 30 Oct
+  "0xdf4f52a5158567a357e91ca6e5d39e111dcfbffb": "0x7dd74c60E65138103891cB1E557c31E65b1B0640", // NVDA $210 · 6 Nov
+  "0x3c3166b3aaa1fde7349818e7df6d19fc9079f6c0": "0xBba9E3124A2511e2Cf501Eb51CEDCf28496A4640", // NVDA $230 · 6 Nov
+  "0xb6253f080eca3de2ff6c4c0ad1bcacbad2f3d28b": "0x68D08E3B92497F78D2016b0003266dEd33338640", // TSLA $350 · 6 Nov
 };
 
 export const marketFor = (series: string) => MARKETS[series.toLowerCase()];

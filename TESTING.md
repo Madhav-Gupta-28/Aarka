@@ -47,8 +47,13 @@ All fifteen series have a market: a Uniswap v4 pool for each half against USDG, 
 hook. Every one opened at a Black-Scholes split of its stock's pool price, at exactly 0 bps.
 
 The hooks were redeployed on 22 September with the AUDIT-24 sizing fix, and the two stock pools
-realigned to the mirrored Chainlink price at the same time — NVDA $227.31, TSLA $376.12. The
-previous twelve hooks are still on chain and still work; nothing reads them any more.
+realigned to the mirrored Chainlink price at the same time — NVDA $227.31, TSLA $376.12.
+
+The eleven open markets were redeployed again on 29 September with the AUDIT-27 liquidity hold and
+the AUDIT-28 settlement check, each opened at its old market's prices so nothing a user sees moved.
+Their addresses end in `0640`, the three permission bits the hook now needs. The four 25 SEP 26
+series had ended by then and keep their 22 September hooks. Every replaced hook is still on chain
+and still works; the site reads them only for the parity history.
 
 | Market | Parity hook |
 | --- | --- |
@@ -56,17 +61,17 @@ previous twelve hooks are still on chain and still work; nothing reads them any 
 | NVDA $230 · 25 SEP 26 | `0x4ED10b89A0c37efDA6d8473A4CB2c81836aB0040` |
 | TSLA $350 · 25 SEP 26 | `0xc1c6720e95E70B51Bbb605101273216DEf7a4040` |
 | TSLA $400 · 25 SEP 26 | `0x029E9Fa2ef97c2D56A1DA76eCD089807af2DC040` |
-| NVDA $210 · 02 OCT 26 | `0x5e8C54dd0ed38bFb7b610e200FEE4741e6AEc040` |
-| NVDA $230 · 02 OCT 26 | `0xF964F74F6c9E9E50024ce3b69d695A0ECd6e4040` |
-| TSLA $350 · 02 OCT 26 | `0x697e9F586C5cbf2A8b04fc1A3199fe60d16A0040` |
-| TSLA $400 · 02 OCT 26 | `0x1E11c14a6A2EadA61Ca024c1514B2DaFBC7A8040` |
-| NVDA $210 · 30 OCT 26 | `0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040` |
-| NVDA $230 · 30 OCT 26 | `0x198296A48A6695064d0eb3c6ac384DFfE477C040` |
-| TSLA $350 · 30 OCT 26 | `0x18362F957046037EEe5E640067658cd96B338040` |
-| TSLA $400 · 30 OCT 26 | `0x5BD834aad040ca50707Ed5fF69701DE1697f8040` |
-| NVDA $210 · 06 NOV 26 | `0x0a7154C1FdABeCb18f3B7CF216264BDa19e88040` |
-| NVDA $230 · 06 NOV 26 | `0x7F75Ec34366D6373480c65b983AdEA9310df0040` |
-| TSLA $350 · 06 NOV 26 | `0xF1c210002bFC398dEC493BF5Eeb86B597f4F4040` |
+| NVDA $210 · 02 OCT 26 | `0x78976b4F38e66dFF82bE1C3B35E37ee8428f8640` |
+| NVDA $230 · 02 OCT 26 | `0xc84Dd6ec3f2BC560dAa06648999FE3c39110c640` |
+| TSLA $350 · 02 OCT 26 | `0xe38d9f109E62bf11A438869C5f82d79788940640` |
+| TSLA $400 · 02 OCT 26 | `0xcE497F09B3ada431e954cb2b39f9b7684fd18640` |
+| NVDA $210 · 30 OCT 26 | `0x8870eAd4E4147cE352F1B33943543031a7c80640` |
+| NVDA $230 · 30 OCT 26 | `0x6d316696b4c80f71ec66F43Cd8F801D638158640` |
+| TSLA $350 · 30 OCT 26 | `0xd41CCb4C5E91b89034e75A44712b5c92B9750640` |
+| TSLA $400 · 30 OCT 26 | `0xc117478b0b0689E1295E832E72C98cf911e8C640` |
+| NVDA $210 · 06 NOV 26 | `0x7dd74c60E65138103891cB1E557c31E65b1B0640` |
+| NVDA $230 · 06 NOV 26 | `0xBba9E3124A2511e2Cf501Eb51CEDCf28496A4640` |
+| TSLA $350 · 06 NOV 26 | `0x68D08E3B92497F78D2016b0003266dEd33338640` |
 
 ### Previous deployment
 
