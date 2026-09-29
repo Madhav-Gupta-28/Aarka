@@ -80,9 +80,10 @@ contract EconomicAuditTest is HookBaseTest {
     ///          5e16       +/-20 ticks   $50k       282 USDG    -24 USDG
     ///          1e17       +/-60 ticks   $200k    3,501 USDG  -1,686 USDG
     ///
-    ///      So it does not pay at these sizes. It is not ruled out against a pool whose flow is
-    ///      mostly uninformed, which is why donating to the triggering pool is still worth revisiting.
-    function test_ECON03_justInTimeLiquidityTakesTheDonation() public {
+    ///      So it did not pay at these sizes. It was not ruled out against a pool whose flow is
+    ///      mostly uninformed, and a 2026 review confirmed the round trip itself was open. The hook
+    ///      now holds new liquidity for MIN_LIQUIDITY_AGE (AUDIT-26), so a sniper has to stay.
+    function test_ECON03_justInTimeLiquidityCannotLeaveWithTheDonation() public {
         address jit = makeAddr("jit");
         usdg.mint(jit, 10_000_000e6);
         nvda.mint(jit, 100_000e18);
@@ -112,6 +113,23 @@ contract EconomicAuditTest is HookBaseTest {
         _swap(floorKey, _isZero(floorKey, address(usdg)), -int256(uint256(200_000e6)));
         uint256 donated = _donatedProfit();
 
+        assertGt(donated, 0, "the hook acted");
+
+        // AUDIT-26: the round trip is closed. The position cannot leave in the block it arrived,
+        // nor collect the donation's fees, until it has stood in the pool for an hour.
+        pos.liquidityDelta = -1e17;
+        uint256 withdrawableAt = block.timestamp + hook.MIN_LIQUIDITY_AGE();
+        vm.prank(jit);
+        vm.expectRevert();
+        liquidityRouter.modifyLiquidity(floorKey, pos, "");
+
+        pos.liquidityDelta = 0; // fee collection goes through the same gate
+        vm.prank(jit);
+        vm.expectRevert();
+        liquidityRouter.modifyLiquidity(floorKey, pos, "");
+
+        // After the hold it is an ordinary LP again, having carried an hour of real exposure.
+        vm.warp(withdrawableAt);
         pos.liquidityDelta = -1e17;
         vm.prank(jit);
         liquidityRouter.modifyLiquidity(floorKey, pos, "");
@@ -126,7 +144,6 @@ contract EconomicAuditTest is HookBaseTest {
         console.log("hook profit donated to the floor pool (USDG):", donated / 1e6);
         console.log("JIT position net result, marked at close (USDG):");
         console.logInt(pnl / 1e6);
-        assertGt(donated, 0, "the hook acted");
     }
 
     function _donatedProfit() private returns (uint256 profit) {

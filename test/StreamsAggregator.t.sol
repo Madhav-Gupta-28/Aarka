@@ -44,6 +44,7 @@ contract StreamsAggregatorTest is Test {
         feeds[1] = NVDA_EXTENDED;
         feeds[2] = NVDA_OVERNIGHT;
         agg = new StreamsAggregator(IVerifierProxy(address(verifier)), feeds, "NVDA / USD - Data Streams");
+        vm.warp(T0 + 1 minutes);
     }
 
     /// @dev A report as the API returns it. Prices arrive with 18 decimals.
@@ -86,7 +87,9 @@ contract StreamsAggregatorTest is Test {
 
     function test_allThreeTradingPhasesFeedOneHistory() public {
         agg.submit(_report(NVDA_OVERNIGHT, 210e18, T0, 4));
+        vm.warp(T0 + 3600 + 1 minutes);
         agg.submit(_report(NVDA_EXTENDED, 211e18, T0 + 3600, 1));
+        vm.warp(T0 + 7200 + 1 minutes);
         agg.submit(_report(NVDA_REGULAR, 212e18, T0 + 7200, 2));
 
         assertEq(agg.latestRound(), 3);
@@ -114,6 +117,7 @@ contract StreamsAggregatorTest is Test {
 
     /// @dev Two phases publish concurrently, so arrival order is not observation order.
     function test_refusesAReportOlderThanTheLatest() public {
+        vm.warp(T0 + 7200 + 1 minutes);
         agg.submit(_report(NVDA_REGULAR, 212e18, T0 + 7200, 2));
         vm.expectRevert(
             abi.encodeWithSelector(StreamsAggregator.NotNewer.selector, uint32(T0), uint32(T0 + 7200))
@@ -147,5 +151,29 @@ contract StreamsAggregatorTest is Test {
     function test_refusesDeploymentWithNoStreams() public {
         vm.expectRevert(StreamsAggregator.NoStreams.selector);
         new StreamsAggregator(IVerifierProxy(address(verifier)), new bytes32[](0), "empty");
+    }
+
+    /// @dev The verifier checks the signature and nothing else, so the report's own window is
+    ///      enforced here.
+    function test_refusesAReportOutsideItsValidityWindow() public {
+        bytes memory early = _report(NVDA_REGULAR, 211e18, T0 + 2 minutes, 2);
+        vm.expectRevert(abi.encodeWithSelector(StreamsAggregator.ReportNotYetValid.selector, uint32(T0 + 2 minutes)));
+        agg.submit(early);
+
+        vm.warp(T0 + 1 days + 1);
+        vm.expectRevert(abi.encodeWithSelector(StreamsAggregator.ReportExpired.selector, uint32(T0 + 1 days)));
+        agg.submit(_report(NVDA_REGULAR, 211e18, T0, 2));
+    }
+
+    /// @dev Inside its validity window a report can still be too old to record: the window can
+    ///      run for a day, and a day of history is a menu of prices to choose from.
+    function test_refusesAReportRecordedLongAfterItWasObserved() public {
+        vm.warp(T0 + 11 minutes);
+        vm.expectRevert(abi.encodeWithSelector(StreamsAggregator.ReportTooOld.selector, uint32(T0)));
+        agg.submit(_report(NVDA_REGULAR, 211e18, T0, 2));
+
+        vm.warp(T0 + 10 minutes);
+        agg.submit(_report(NVDA_REGULAR, 211e18, T0, 2));
+        assertEq(agg.latestRound(), 1, "ten minutes is inside the bound");
     }
 }

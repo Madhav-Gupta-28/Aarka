@@ -40,6 +40,11 @@ contract MockUSDG is MockStockToken {
 ///      carries no hook, because one cannot be attached to a live pool. Only the two Aarka
 ///      pools have the hook installed.
 contract HookBaseTest is Test {
+    /// @dev The permission bits the hook's address must carry: afterSwap for the arb, and the two
+    ///      liquidity callbacks for the hold that stops a sniper taking its donation.
+    uint160 internal constant HOOK_FLAGS =
+        Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG;
+
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
@@ -113,7 +118,7 @@ contract HookBaseTest is Test {
     ///      address has to be mined with CREATE2. Getting this wrong is the classic way a first
     ///      v4 hook fails, and the constructor asserts it rather than trusting the deploy script.
     function _mineAndDeploy() internal returns (AarkaParityHook deployed) {
-        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
+        uint160 flags = HOOK_FLAGS;
         bytes memory args =
             abi.encode(IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner);
         (, bytes32 salt) = HookMiner.find(address(this), flags, type(AarkaParityHook).creationCode, args);
@@ -123,7 +128,7 @@ contract HookBaseTest is Test {
     }
 
     function _deployHook() private {
-        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
+        uint160 flags = HOOK_FLAGS;
         bytes memory args =
             abi.encode(IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner);
         (address expected, bytes32 salt) =
@@ -133,7 +138,7 @@ contract HookBaseTest is Test {
             IPoolManager(address(manager)), series, Currency.wrap(address(usdg)), owner
         );
         assertEq(address(hook), expected, "mined address mismatch");
-        assertEq(uint160(address(hook)) & Hooks.ALL_HOOK_MASK, Hooks.AFTER_SWAP_FLAG, "wrong flags");
+        assertEq(uint160(address(hook)) & Hooks.ALL_HOOK_MASK, HOOK_FLAGS, "wrong flags");
     }
 
     function _initialisePools() private {

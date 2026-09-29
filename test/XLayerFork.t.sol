@@ -76,6 +76,7 @@ contract XLayerForkTest is Test {
     }
 
     function _submit(int192 mid18, uint32 observedAt, uint32 status) internal {
+        if (block.timestamp < observedAt + 30) vm.warp(observedAt + 30);
         feed.submit(
             abi.encode(
                 StreamsAggregator.ReportV11({
@@ -116,7 +117,7 @@ contract XLayerForkTest is Test {
 
     /// @notice Create a series on real NVDAx, split it, settle it, claim it.
     function test_theWholeLifecycleOnRealTokenizedNvidia() public {
-        _submit(211.93e18, uint32(block.timestamp - 10 minutes), 2);
+        _submit(211.93e18, uint32(block.timestamp - 5 minutes), 2);
 
         address s = factory.createSeries(NVDAX, STRIKE, EXPIRY);
         AarkaSeries series = AarkaSeries(s);
@@ -172,7 +173,7 @@ contract XLayerForkTest is Test {
 
     /// @notice The sequencer guard is not decoration here: settlement refuses while it is down.
     function test_settlementRefusesWhileTheSequencerIsDown() public {
-        _submit(211.93e18, uint32(block.timestamp - 10 minutes), 2);
+        _submit(211.93e18, uint32(block.timestamp - 5 minutes), 2);
         address s = factory.createSeries(NVDAX, STRIKE, EXPIRY);
         AarkaSeries series = AarkaSeries(s);
 

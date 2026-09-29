@@ -59,6 +59,10 @@ contract AarkaParityHook is IHooks, Ownable {
     using SafeERC20 for IERC20;
 
     uint256 private constant Q96 = 1 << 96;
+
+    /// @notice The v4 permission bits this hook's address must carry, and nothing else.
+    uint160 public constant PERMISSIONS =
+        Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG;
     uint256 private constant BPS = 10_000;
 
     /// @dev Transient reentrancy flag. The hook trades the very pools it is installed on, so its
@@ -109,6 +113,21 @@ contract AarkaParityHook is IHooks, Ownable {
     ///      impossible to induce into a losing trade.
     uint256 public maxArbSize;
 
+    /// @notice How long liquidity must stay in a hooked pool before it can be withdrawn.
+    /// @dev The arbitrage profit is donated to the in-range liquidity of the pool that triggered
+    ///      it. Without a hold, anyone can add liquidity, trigger the arb with a dust swap and pull
+    ///      the liquidity out in the same transaction, taking the donation meant for the LPs who
+    ///      stood there all along. An hour turns that risk-free round trip into an hour of real
+    ///      exposure on a position the sniper would rather not hold (AUDIT-26).
+    ///
+    ///      The hold applies to every withdrawal from a pool that names this hook, including
+    ///      zero-liquidity fee collection, which v4 routes through beforeRemoveLiquidity. It
+    ///      restarts when a position is topped up.
+    uint256 public constant MIN_LIQUIDITY_AGE = 1 hours;
+
+    /// @notice When each position in a hooked pool last received liquidity.
+    mapping(bytes32 positionKey => uint256 addedAt) public liquidityAddedAt;
+
     event Wired(PoolId underlyingPool, PoolId floorPool, PoolId upsidePool);
     event ParityRestored(bool minted, uint256 size, uint256 profit);
     event ParamsSet(uint256 minDeviationBps, uint256 maxArbSize);
@@ -125,13 +144,15 @@ contract AarkaParityHook is IHooks, Ownable {
     error NoProfitableSize();
     error UnknownPool();
     error UnexpectedDelta();
+    error PoolNotInitialised();
+    error LiquidityTooNew(uint256 withdrawableAt);
 
     constructor(IPoolManager poolManager_, AarkaSeries series_, Currency quote_, address owner_)
         Ownable(owner_)
     {
         // v4 reads a hook's permissions from the low 14 bits of its own address, so the deployment
         // address must be mined with CREATE2 to match. This asserts the mining actually worked.
-        if (uint160(address(this)) & Hooks.ALL_HOOK_MASK != Hooks.AFTER_SWAP_FLAG) {
+        if (uint160(address(this)) & Hooks.ALL_HOOK_MASK != PERMISSIONS) {
             revert InvalidHookAddress();
         }
 
@@ -157,6 +178,16 @@ contract AarkaParityHook is IHooks, Ownable {
         _requirePair(floorKey_, floorCurrency);
         _requirePair(upsideKey_, upsideCurrency);
 
+        // The two halves' pools must carry this hook, or their swaps never reach afterSwap and the
+        // pair is enforced by nothing. The underlying pool is the existing market and carries none.
+        if (address(floorKey_.hooks) != address(this) || address(upsideKey_.hooks) != address(this)) {
+            revert PoolMismatch();
+        }
+        // An uninitialised pool prices at zero, and every later arb would divide by it.
+        _requireInitialised(underlyingKey_);
+        _requireInitialised(floorKey_);
+        _requireInitialised(upsideKey_);
+
         underlyingKey = underlyingKey_;
         floorKey = floorKey_;
         upsideKey = upsideKey_;
@@ -172,6 +203,11 @@ contract AarkaParityHook is IHooks, Ownable {
         minDeviationBps = minDeviationBps_;
         maxArbSize = maxArbSize_;
         emit ParamsSet(minDeviationBps_, maxArbSize_);
+    }
+
+    function _requireInitialised(PoolKey calldata key) private view {
+        (uint160 sqrtP,,,) = poolManager.getSlot0(key.toId());
+        if (sqrtP == 0) revert PoolNotInitialised();
     }
 
     function _requirePair(PoolKey calldata key, Currency asset) private view {
@@ -465,8 +501,8 @@ contract AarkaParityHook is IHooks, Ownable {
     // --------------------------------------------------------------------
     // Unused IHooks entry points
     // --------------------------------------------------------------------
-    // v4 derives permissions from the hook's address, so with only AFTER_SWAP_FLAG set these are
-    // never called. They revert rather than returning a selector so a mis-mined address fails
+    // v4 derives permissions from the hook's address, so with only the PERMISSIONS bits set these
+    // are never called. They revert rather than returning a selector so a mis-mined address fails
     // loudly at the first swap instead of silently doing nothing.
 
     function beforeInitialize(address, PoolKey calldata, uint160) external pure returns (bytes4) {
@@ -485,24 +521,42 @@ contract AarkaParityHook is IHooks, Ownable {
         revert HookNotImplemented();
     }
 
+    // --------------------------------------------------------------------
+    // Liquidity hold
+    // --------------------------------------------------------------------
+
     function afterAddLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata params,
         BalanceDelta,
         BalanceDelta,
         bytes calldata
-    ) external pure returns (bytes4, BalanceDelta) {
-        revert HookNotImplemented();
+    ) external returns (bytes4, BalanceDelta) {
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
+        liquidityAddedAt[_positionKey(sender, key, params)] = block.timestamp;
+        return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
     }
 
     function beforeRemoveLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata params,
         bytes calldata
-    ) external pure returns (bytes4) {
-        revert HookNotImplemented();
+    ) external view returns (bytes4) {
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
+        uint256 withdrawableAt = liquidityAddedAt[_positionKey(sender, key, params)] + MIN_LIQUIDITY_AGE;
+        if (block.timestamp < withdrawableAt) revert LiquidityTooNew(withdrawableAt);
+        return IHooks.beforeRemoveLiquidity.selector;
+    }
+
+    /// @dev The same identity v4 gives a position: owner, range and salt, scoped to the pool.
+    function _positionKey(address sender, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata params)
+        private
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(key.toId(), sender, params.tickLower, params.tickUpper, params.salt));
     }
 
     function afterRemoveLiquidity(

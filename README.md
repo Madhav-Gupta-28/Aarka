@@ -40,7 +40,7 @@ The six-hour window this replaced stranded one-half holders on quiet closes; see
 ## Tests
 
 ```
-forge test --no-match-path test/Fork.t.sol       # 178 tests
+forge test --no-match-path "test/{Fork,XLayerFork}.t.sol"   # 206 tests
 forge test --match-path test/Fork.t.sol --fork-url robinhood   # against the live Chainlink feed
 forge coverage --no-match-coverage "test|script"
 ```

@@ -510,3 +510,90 @@ cannot reach the chain stops vouching for it rather than silently continuing to.
 
 12 tests cover the feed and what it does to settlement: up, down, a restart holding settlement for
 the grace period, a dead keeper reading as down, and the late path overriding all of it.
+
+---
+
+## Third review, 29 September
+
+An automated review with the [Pashov `solidity-auditor`](https://github.com/pashov/skills) skill:
+twelve specialised agents per pass, two passes over `src/` and `script/` at `5e426f3`, every
+finding put through the skill's four gates by hand. Three findings survived; all three are fixed
+below. Nineteen leads were recorded as well; the ones that were cheap and safe to close are closed,
+the rest are listed at the end.
+
+None of this changes a deployed contract. Nothing here is upgradeable, so the testnet deployment
+keeps the old code until it is redeployed; the X Layer adapter has not been deployed at all.
+
+### AUDIT-24 · High · A submitter could choose the settlement price on Data Streams
+
+`StreamsAggregator.submit` records any signed report newer than the last one on file, and it
+never read the report's own `validFromTimestamp` or `expiresAt`. Recording is permissionless and
+ordered by observation time, so whoever records decides the history:
+
+1. hold back a favourable signed price from inside the 26-hour window before expiry;
+2. record it once nothing newer is on file;
+3. record any report from after expiry — now the true last price before expiry can never be
+   added, because it is older than the latest round;
+4. settle. `_requireNoLaterRound` passes, and no challenge is possible, because no later
+   pre-expiry round can ever be recorded.
+
+**Fix.** `submit` enforces the report's validity window and a `MAX_SUBMIT_DELAY` of ten minutes
+between observation and recording. A held-back price is now too old to record long before it is
+useful. What remains is the ordinary race at the close — a submitter can still pick among prices
+from the last ten minutes — which a keeper recording every poll closes in practice.
+`test_aHeldBackPriceCannotBecomeTheSettlement` runs the attack and watches it fail.
+
+### AUDIT-25 · Medium · A keeper that resumed after a gap skipped the grace period
+
+`AarkaSequencerFeed.report` refreshed the current round whenever the status was unchanged. But
+once `MAX_REPORT_AGE` passes, `latestRoundData` has been telling every reader "down" — and that
+synthetic down was never written to storage. So the first "up" after the gap refreshed the old
+round, carried its `startedAt` forward, and `_requireSequencerUp` saw a sequencer up for days. The
+one-hour grace period, which exists for exactly the moment a watched chain comes back, was skipped.
+
+This also corrects a claim above: an honest keeper with an outage *could* make settlement looser
+than intended, not only stricter.
+
+**Fix.** A report that arrives after the round has gone stale opens a new round, dated now,
+whatever it says. `test_aReportAfterAGapRestartsTheGracePeriod` covers it.
+`test_settlementWorksWhileTheSequencerIsUp` had been passing on the bug — it reported twice, four
+days apart, while its comment said "every half hour". It now reports every half hour.
+
+### AUDIT-26 · Medium · Just-in-time liquidity could leave with the arbitrage donation
+
+The hook donates the whole arbitrage profit to the in-range liquidity of the pool that triggered
+it, and nothing gated liquidity. ECON-03 had measured the round trip as unprofitable at the sizes
+tried, against informed flow, and left it open. The round trip itself — add, trigger with a dust
+swap, remove, in one transaction — was never closed, and the underlying pool carries no hook, so
+a gap opened there waits for whoever triggers first.
+
+**Fix.** The hook now also takes `afterAddLiquidity` and `beforeRemoveLiquidity`, and liquidity in
+a hooked pool cannot be withdrawn — nor its fees collected — until `MIN_LIQUIDITY_AGE`, one hour,
+after it was last added. A sniper has to stand in the pool for an hour of real exposure. The
+permission bits are now `0x640`, so the hook address is mined against three flags; the constructor
+asserts it. ECON-03 now asserts the round trip reverts, and succeeds after the hold.
+
+A donation can still reach liquidity that has only been there for an hour; that is the trade-off,
+and the one every donating v4 hook makes. Honest LPs cannot withdraw within an hour of adding.
+
+### Also changed in response to this review
+
+- `wire` requires the two halves' pools to name this hook, and all three pools to be initialised.
+  Either mistake used to leave a hook that silently never acted, or divided by a zero price.
+- `AarkaRouter.unlockCallback` asserts the sign of both swap deltas before negating, as the hook's
+  own settlement already did.
+
+### Leads left open, with the reason
+
+| Lead | Why it stays open |
+| --- | --- |
+| `challengeSettlement` skips `settle`'s sequencer, pause and corporate-action checks | A later round inherits the corporate-action result by construction, and no bad price was found without AUDIT-24, now closed |
+| `_requireNoLaterRound` probes only `roundId + 1` | Holds for Chainlink rounds within a phase; the phase boundary is what `challengeSettlement` is for |
+| Mint and redeem stay open through a corporate action | §3.6: stock tokens do not rebase. Three agents argued otherwise; worth confirming against the live token before mainnet |
+| `registerAsset` can be front-run by `createSeries` | Owner action; a series opened on a retiring feed is visible and avoidable |
+| Router accepts any pool containing the sold half | Only the caller's own funds are at risk; an integrator calling it for a user should pin the pool |
+
+```
+206 unit, fuzz and invariant tests, all passing
+7 fork tests against Robinhood Chain mainnet, 3 against X Layer, all passing
+```

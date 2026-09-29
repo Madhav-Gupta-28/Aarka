@@ -87,12 +87,19 @@ contract AarkaSequencerFeed is AggregatorV3Interface, Ownable {
     /// @dev A status change opens a new round, so `startedAt` marks the moment the chain came back
     ///      and a consumer's grace period runs from there. An unchanged status refreshes the
     ///      current round, which is what keeps it from going stale.
+    ///
+    ///      A round that has already gone stale is not refreshed, whatever it says. Readers have
+    ///      been told "down" since MAX_REPORT_AGE passed, and nobody watched the chain in that gap,
+    ///      so "still up since startedAt" is a claim nothing supports. Refreshing it would carry
+    ///      the old startedAt forward and let a consumer skip the grace period on the first report
+    ///      after the gap. A new round dates the status from now instead (AUDIT-25).
     function report(bool up) external returns (uint80 roundId) {
         if (msg.sender != reporter) revert NotReporter();
         int256 answer = up ? UP : DOWN;
 
         Round memory current = _rounds[latestRound];
-        if (latestRound != 0 && current.answer == answer) {
+        bool stale = block.timestamp - current.updatedAt > MAX_REPORT_AGE;
+        if (latestRound != 0 && current.answer == answer && !stale) {
             _rounds[latestRound].updatedAt = uint64(block.timestamp);
             emit Reported(latestRound, answer, current.startedAt, uint64(block.timestamp));
             return latestRound;

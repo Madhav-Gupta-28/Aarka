@@ -56,6 +56,7 @@ contract AarkaRouter is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidAmount();
     error ZeroAddress();
     error InsufficientOutput(uint256 amountOut, uint256 minAmountOut);
+    error UnexpectedDelta();
 
     constructor(IPoolManager poolManager_, AarkaFactory factory_) {
         poolManager = poolManager_;
@@ -174,7 +175,10 @@ contract AarkaRouter is IUnlockCallback, ReentrancyGuardTransient {
         int128 got = d.zeroForOne ? delta.amount1() : delta.amount0();
 
         // Exact input: the pool owes us `got` and we owe it `paid`, which is at most amountIn and
-        // less only when the price limit cut the fill short.
+        // less only when the price limit cut the fill short. Assert both signs rather than trust
+        // them: negating a credit would ask the payer for an enormous amount, and the hook's own
+        // settlement makes the same check for the same reason.
+        if (paid > 0 || got < 0) revert UnexpectedDelta();
         uint256 owed = uint256(uint128(-paid));
         poolManager.sync(cin);
         if (d.payer == address(this)) {

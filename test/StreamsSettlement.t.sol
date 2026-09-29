@@ -50,7 +50,10 @@ contract StreamsSettlementTest is Test {
         nvdax.approve(address(series), type(uint256).max);
     }
 
+    /// @dev A keeper records each report a moment after it is observed, which is now the only way
+    ///      the adapter accepts one.
     function _submit(bytes32 feedId, int192 mid18, uint32 observedAt, uint32 status) internal {
+        vm.warp(observedAt + 30);
         feed.submit(
             abi.encode(
                 StreamsAggregator.ReportV11({
@@ -79,7 +82,6 @@ contract StreamsSettlementTest is Test {
         _submit(NVDA_REGULAR, 240e18, uint32(EXPIRY - 25 minutes), 2); // the close
         _submit(NVDA_OVERNIGHT, 244e18, uint32(EXPIRY + 2 hours), 4); // after expiry, must be ignored
 
-        vm.warp(EXPIRY + 1);
         series.settle(2);
 
         assertEq(series.settlementPrice(), 240e8, "the last price printed before the close");
@@ -103,7 +105,6 @@ contract StreamsSettlementTest is Test {
     function test_aReportAfterExpiryIsRefused() public {
         _submit(NVDA_REGULAR, 240e18, uint32(EXPIRY - 25 minutes), 2);
         _submit(NVDA_OVERNIGHT, 300e18, uint32(EXPIRY + 1 hours), 4);
-        vm.warp(EXPIRY + 2 hours);
 
         vm.expectRevert(AarkaSeries.RoundAfterExpiry.selector);
         series.settle(2);
@@ -119,5 +120,32 @@ contract StreamsSettlementTest is Test {
         series.settle(1);
         assertEq(series.settlementPrice(), 236e8);
         assertFalse(series.settledLate(), "22 hours is inside the window, not the late path");
+    }
+
+    /// @notice The attack AUDIT-24 closes. Hold back a favourable signed price, record it once
+    ///         nothing newer is on file, record anything from after expiry so the true close can
+    ///         never be added, and settle. Every step used to succeed.
+    function test_aHeldBackPriceCannotBecomeTheSettlement() public {
+        vm.prank(alice);
+        series.mint(100e18, alice);
+
+        // A real report from 20 hours before expiry, at a price the floor holder likes, kept off
+        // chain while the market moves.
+        uint32 heldAt = uint32(EXPIRY - 20 hours);
+        bytes memory held = abi.encode(
+            StreamsAggregator.ReportV11({
+                feedId: NVDA_OVERNIGHT, validFromTimestamp: heldAt, observationsTimestamp: heldAt,
+                nativeFee: 0, linkFee: 0, expiresAt: heldAt + 1 days, mid: 150e18,
+                lastSeenTimestampNs: uint64(heldAt) * 1e9, bid: 150e18, bidVolume: 1e18,
+                ask: 150e18, askVolume: 1e18, lastTradedPrice: 150e18, marketStatus: 4
+            })
+        );
+
+        // Just after expiry it is still inside its own validity window, and still the newest
+        // observation on file. The age bound is what refuses it.
+        vm.warp(EXPIRY + 1);
+        vm.expectRevert(abi.encodeWithSelector(StreamsAggregator.ReportTooOld.selector, heldAt));
+        feed.submit(held);
+        assertEq(feed.latestRound(), 0);
     }
 }
