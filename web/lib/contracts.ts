@@ -7,7 +7,7 @@
 export const ADDRESSES = {
   factory: "0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA",
   lens: "0xaE4f737b0f259b1C8A15a73367670090c94bB2d7",
-  router: "0xe7C93E5b953a98F1601D469bFb30eE6f687c678a",
+  router: "0xb47D3Bf8012fF8dfC56ABfc7142d55735E3508a0",
   calendar: "0x111040a3CfA607EF19693A023b157e9f806C622b",
   /** Where a first visit lands: NVDA $210, 30 Oct 2026, the longest-dated NVDA market. */
   flagshipSeries: "0x7D31f372d747EDB24dB9242d5e48Cf68aA8dBdcF",

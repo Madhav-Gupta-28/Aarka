@@ -34,7 +34,12 @@ MAX_BACKFILL="${MAX_BACKFILL:-60}"
 # Aarka's stopgap sequencer uptime feed. Chainlink publishes none for Robinhood Chain, so this
 # keeper is what keeps the guard alive. Reporting nothing reads as down, not as up, so a keeper
 # that dies fails closed.
-SEQUENCER_FEED="${SEQUENCER_FEED:-0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303}"
+#
+# Two of them. The first carries the three 06 NOV 26 series, which store it for life. The second
+# has the AUDIT-26 fix and is what the factory hands every series created since 29 Sep 2026. A
+# series keeps whichever it was born with, so both are reported until the last series on the first
+# has settled.
+SEQUENCER_FEEDS="${SEQUENCER_FEEDS:-0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303 0x4535B4dE5727bFADC6bD5E42242Ae2D25602341A}"
 # A sequencer that has not produced a block in this long is not sequencing.
 MAX_BLOCK_LAG="${MAX_BLOCK_LAG:-600}"
 
@@ -45,8 +50,10 @@ report_sequencer() {
   lag=$(( $(date -u +%s) - block_time ))
   if [ "$lag" -le "$MAX_BLOCK_LAG" ]; then up=true; else up=false; fi
 
-  cast send "$SEQUENCER_FEED" "report(bool)" "$up" \
-    --rpc-url "$TESTNET_RPC" --private-key "$PRIVATE_KEY" >/dev/null
+  for feed in $SEQUENCER_FEEDS; do
+    cast send "$feed" "report(bool)" "$up" \
+      --rpc-url "$TESTNET_RPC" --private-key "$PRIVATE_KEY" >/dev/null
+  done
   echo "$(date -u +%FT%TZ) sequencer up=$up (last block ${lag}s ago)"
 }
 

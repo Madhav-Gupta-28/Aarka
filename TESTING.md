@@ -20,9 +20,9 @@ Redeployed on 15 September 2026 with the settlement and symbol fixes from the se
 | --- | --- |
 | AarkaFactory | `0x69caa2b3d4f732861A36e78b5A3992d18faA9BcA` |
 | AarkaLens | `0xaE4f737b0f259b1C8A15a73367670090c94bB2d7` |
-| AarkaRouter | `0xe7C93E5b953a98F1601D469bFb30eE6f687c678a` |
+| AarkaRouter | `0xb47D3Bf8012fF8dfC56ABfc7142d55735E3508a0` |
 | AarkaParityHook | `0xFd7Ac12730eFAE6e0B4e7e5Beb29780989D04040` (NVDA $210 · 30 OCT 26) |
-| AarkaSequencerFeed | `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` |
+| AarkaSequencerFeed | `0x4535B4dE5727bFADC6bD5E42242Ae2D25602341A` (new series), `0x723e4FD23E26eFb48FEeFb2e45CE53627BCf2303` (the three 06 NOV series) |
 | NVDA (stand-in) | `0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1` |
 | TSLA (stand-in) | `0x06002571803D40bD20C13Bd835BE30a642623dEA` |
 | USDG (stand-in) | `0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097` |

@@ -574,8 +574,9 @@ with the second review above.
 
 None of this changes a deployed contract. Nothing here is upgradeable, so the testnet deployment
 keeps the old code until it is redeployed; the X Layer adapter has not been deployed at all.
-The hook half of it shipped on 29 September, when the eleven open markets were redeployed (see
-the fourth review); the sequencer feed and the router still run the older code.
+All of it except the X Layer adapter shipped on 29 September: the eleven open markets got new
+hooks, the router was redeployed with the delta-sign check (`0xb47D3Bf8012fF8dfC56ABfc7142d55735E3508a0`), and a new sequencer feed with
+the AUDIT-26 fix (`0x4535B4dE5727bFADC6bD5E42242Ae2D25602341A`) became the factory's. See the fourth review.
 
 ### AUDIT-25 · High · A submitter could choose the settlement price on Data Streams
 
@@ -710,6 +711,16 @@ explorer against the current source. A $50k parity trade was rehearsed on a fork
 $5 trade run through the router afterwards. Deploying them showed that forge's exact gas estimates
 can fall short on this chain, whose L1 data fee moves between simulation and inclusion, so
 `open-markets.py` now asks for twice the estimate.
+
+The router went out the same day with the delta-sign check (`0xb47D3Bf8012fF8dfC56ABfc7142d55735E3508a0`); the site uses it, and a user
+gives it permission once, as the site already asks whenever an allowance is missing. The old router
+still works and holds nothing.
+
+The sequencer feed was replaced for every series created from now on: a new `AarkaSequencerFeed`
+with the AUDIT-26 fix (`0x4535B4dE5727bFADC6bD5E42242Ae2D25602341A`), set as the factory's feed. A series stores its feed for life, so
+the three 06 NOV series stay on the old one, and the keeper reports both. Whether those three settle
+on the normal path therefore rests on the keeper running on time, which GitHub's scheduler does not
+do: `keeper/Dockerfile` runs it every thirty minutes on any always-on host.
 
 ### Checked and sound
 
