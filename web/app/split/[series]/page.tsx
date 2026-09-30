@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import {useParams} from "next/navigation";
-import {useState} from "react";
+import {useParams, useRouter, useSearchParams} from "next/navigation";
+import {useEffect, useState} from "react";
 import {ActionPanel} from "@/components/ActionPanel";
 import {Shell} from "@/components/Chrome";
 import {DigitRoll} from "@/components/Motion";
@@ -27,7 +27,14 @@ export default function SplitDetail() {
   const {view} = usePrefs();
   const q = s ? quoteFor(s, parity) : undefined;
   const w = useWhatIf(q?.strike ?? 100, q?.spot ?? 0);
-  const [tab, setTab] = useState<Kind>("split");
+  const router = useRouter();
+  const ask = useSearchParams().get("do");
+  const [tab, setTab] = useState<Kind>(ask === "rejoin" || ask === "buy" || ask === "sell" ? ask : "split");
+
+  // After the end date this page has nothing to trade, only a price to set and money to collect,
+  // so it becomes the final-day page. Putting pairs back together still lives here.
+  const ended = !!s && s.status !== 0;
+  useEffect(() => { if (ended && ask !== "rejoin") router.replace(`/split/${series}/final`); }, [ended, ask, series, router]);
   const [details, setDetails] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -42,7 +49,7 @@ export default function SplitDetail() {
   return (
     <Shell>
       <div className="crumbs">
-        <Link href="/markets">MARKETS</Link><span>/</span><Link href={`/markets?stock=${s.underlyingSymbol}`}>{name.toUpperCase()}</Link><span>/</span>
+        <Link href="/app">APP</Link><span>/</span><span>{name.toUpperCase()}</span><span>/</span>
         <span className="here">${K} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
         <span className="ml-auto"><SeriesStamp s={s} /></span>
       </div>
@@ -60,6 +67,10 @@ export default function SplitDetail() {
                 </div>
                 <h1 className="display h-xl rise">{name} <span className="px-em">split</span></h1>
                 <p className="lead">${K} line · ends {endShort(s.expiry)}. Split one share into a Floor and an Upside around ${K}.</p>
+                <div className="row gap-12 wrap-row">
+                  <a href="#act" className="btn btn-primary">Split, buy or sell ↓</a>
+                  <a href="#act" onClick={() => setTab("rejoin")} className="btn btn-quiet">Put back together</a>
+                </div>
               </div>
               <div className="sd-price">
                 <span className="label" style={{fontSize: 13, letterSpacing: ".12em"}}>ONE {name.toUpperCase()} SHARE TODAY</span>
@@ -172,7 +183,7 @@ export default function SplitDetail() {
                     <div className="stack gap-6" style={{gap: 6}}>
                       <div className="row gap-8"><strong style={{fontWeight: 600}}>The Sun</strong><span className={`stamp ${q.fresh ? "stamp-live" : "stamp-delayed"}`} style={{padding: "3px 5px"}}>{q.fresh ? "LIVE" : "DELAYED"}</span></div>
                       <span className="small">Our independent price source. Last updated {ago(s.spotUpdatedAt)}.</span>
-                      <Link href="/sun" className="mono" style={{fontSize: 13}}>Where prices come from →</Link>
+                      <Link href="/how#sun" className="mono" style={{fontSize: 13}}>Where prices come from →</Link>
                     </div>
                   </div>
                   <div className="trust-card spot tone-up" {...spot}>
@@ -206,7 +217,7 @@ export default function SplitDetail() {
                   )}
                 </div>
               </div>
-              <ActionPanel s={s} q={q} bal={bal} tab={tab} setTab={setTab} />
+              <div id="act" style={{scrollMarginTop: 24}}><ActionPanel s={s} q={q} bal={bal} tab={tab} setTab={setTab} /></div>
             </div>
           </section>
         </>

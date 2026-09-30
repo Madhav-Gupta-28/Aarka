@@ -71,7 +71,7 @@ export function SplitMissing({loading}: {loading: boolean}) {
         <span className="kicker">NOTHING HERE</span>
         <h1 className="display h-page">This split isn&apos;t here.</h1>
         <p className="lead">It may have ended and been fully collected, or the link is wrong. Your funds are untouched.</p>
-        <div className="row gap-16 wrap-row"><Link href="/markets" className="btn btn-primary btn-lg">Browse splits</Link><Link href="/ledger" className="btn btn-secondary btn-lg">View my ledger</Link></div>
+        <div className="row gap-16 wrap-row"><Link href="/app" className="btn btn-primary btn-lg">Open the app</Link><Link href="/app#positions" className="btn btn-secondary btn-lg">What I hold</Link></div>
       </div>
     </div>
   );

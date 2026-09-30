@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import {Providers} from "@/components/Providers";
 import "./globals.css";
 import "./pages.css";
+import "./kinetic.css";
 
 /**
  * Four voices. A knife-cut serif for feeling, a sturdy grotesk for reading, a terminal mono for
@@ -19,7 +20,12 @@ const px = localFont({src: "./fonts/DepartureMono-Regular.woff2", variable: "--f
 const THEME_BOOT = `try{var t=localStorage.getItem('aarka.theme');if(t==='limestone')document.documentElement.dataset.theme=t}catch(e){}`;
 
 export const metadata: Metadata = {
-  title: "Aarka — split a stock into a floor and the upside",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100"),
+  title: {default: "Aarka — split a stock into a floor and the upside", template: "%s · Aarka"},
+  openGraph: {type: "website", siteName: "Aarka", title: "Aarka — split a stock into a floor and the upside",
+              description: "Earn cash on the shares you hold, or bet on a rise for a fraction of the price. No borrowing, nothing to liquidate."},
+  twitter: {card: "summary_large_image", title: "Aarka — split a stock into a floor and the upside",
+            description: "Earn cash on the shares you hold, or bet on a rise for a fraction of the price. No borrowing, nothing to liquidate."},
   description:
     "Keep the part you want. Sell or trade the part you don't. Put them back together anytime. " +
     "Tokenized stocks, split into a Floor and an Upside, priced by an independent public source.",

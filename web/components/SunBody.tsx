@@ -1,15 +1,14 @@
 "use client";
 
 import {useState} from "react";
-import {FootCompact, SiteHeader, TabBar} from "@/components/Chrome";
-import {Relic, Reveal} from "@/components/Relic";
+import {Relic, Reveal} from "./Relic";
 import {stocksOf, useSeries} from "@/lib/data";
 import {ago, money, short, stockName} from "@/lib/format";
 import {RELIC} from "@/lib/relics";
 import {explorerAddr} from "@/lib/tx";
 import {spot} from "@/lib/ui";
 
-export default function TheSun() {
+export function SunBody() {
   const {data: rows} = useSeries();
   const stocks = stocksOf(rows);
   const [tech, setTech] = useState(false);
@@ -21,22 +20,14 @@ export default function TheSun() {
   ];
 
   return (
-    <div className="page">
-      <SiteHeader />
-      <main id="main">
-        <section className="sun-hero">
-          <div className="wrap copy">
-            <span className="mono lapis rise" style={{fontSize: 14, letterSpacing: ".14em"}}>F4 · THE SUN · OUR INDEPENDENT PRICE SOURCE</span>
-            <h1 className="display h-page rise" style={{"--d": "120ms", color: "#F7F4ED"} as React.CSSProperties}>Every price, from an <span className="px-em">independent</span> source.</h1>
-            <p className="lead rise" style={{maxWidth: 520, fontSize: 21, "--d": "240ms"} as React.CSSProperties}>Nobody at Aarka can change it. The same public source sets the final price for every split, on every end date.</p>
-          </div>
-          <span className="fig label">FIG. 2 · THE SUN DISK, WEIGHED BY THE SCALES</span>
+    <>
+        <section className="wrap" style={{paddingTop: 96}}>
+          <span className="kicker lapis">THE SUN · WHERE EVERY PRICE COMES FROM</span>
         </section>
-
-        <section className="section gridlines">
+        <section id="sun" className="section gridlines rule-top" style={{scrollMarginTop: 24}}>
           <div className="wrap stack gap-32">
             <div className="head12 with-note">
-              <div className="kicker">TABLET I</div>
+              <div className="kicker">TABLET VII</div>
               <h2 className="display h-section" style={{fontSize: "clamp(44px, 5.6vw, 80px)"}}>Right now</h2>
               <p className="note" style={{fontSize: 15}}>Live means a price arrived in the last 26 hours: the daily heartbeat, plus a margin. Delayed means it&apos;s running late.</p>
             </div>
@@ -59,7 +50,7 @@ export default function TheSun() {
 
         <section className="section deep rule-top">
           <div className="wrap stack gap-48" style={{gap: 40}}>
-            <div className="head12"><div className="kicker">TABLET II</div><h2 className="display h-section" style={{fontSize: "clamp(44px, 5.6vw, 80px)"}}>How the final price is chosen</h2></div>
+            <div className="head12"><div className="kicker">TABLET VIII</div><h2 className="display h-section" style={{fontSize: "clamp(44px, 5.6vw, 80px)"}}>How the final price is chosen</h2></div>
             <div className="how3">
               {steps.map((p, i) => (
                 <div key={p.n} style={{display: "contents"}}>
@@ -77,7 +68,7 @@ export default function TheSun() {
 
         <section className="section rule-top">
           <div className="wrap quiet">
-            <div className="kicker">TABLET III</div>
+            <div className="kicker">TABLET IX</div>
             <div className="stack gap-24">
               <h2 className="display h-sub" style={{fontSize: "clamp(40px, 5vw, 72px)"}}>What if the price source goes <span className="em">quiet?</span></h2>
               <p className="body" style={{fontSize: 19, lineHeight: 1.6}}>Sometimes a price arrives late. When that happens we show a Delayed stamp, so you always know how fresh a number is.</p>
@@ -108,9 +99,6 @@ export default function TheSun() {
             )}
           </div>
         </section>
-      </main>
-      <FootCompact />
-      <TabBar />
-    </div>
+    </>
   );
 }

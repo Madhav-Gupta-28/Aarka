@@ -531,15 +531,6 @@ h1, h2, h3, h4 { margin: 0; font-weight: 400; }
   .term-stats > div:nth-child(5) { border-right: 0; }
   .term-stats > div:nth-child(-n+5) { border-bottom: 1px solid var(--line); }
 
-  .tabbar {
-    display: grid; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; height: 72px; grid-template-columns: repeat(4, 1fr); gap: 6px;
-    padding: 10px 8px 14px; background: var(--bg); border-top: 1px solid var(--line);
-  }
-  .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--line); border-bottom: 3px solid var(--line); background: var(--surface); text-decoration: none; color: var(--text); font-family: var(--f-num), monospace; font-stretch: 87.5%; font-weight: 500; font-size: 11px; letter-spacing: .04em; transition: background 160ms, color 160ms; }
-  .tabbar a span { color: var(--accent); }
-  .tabbar a[aria-current="page"] { background: var(--accent); border-color: var(--bronze); color: var(--on-accent); font-weight: 600; }
-  .tabbar a[aria-current="page"] span { color: var(--on-accent); }
-  .page { padding-bottom: 72px; }
   .toasts { bottom: 88px; }
 }
 
