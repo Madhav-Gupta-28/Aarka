@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import {useState} from "react";
-import {Shell} from "@/components/Chrome";
-import {Relic, Reveal} from "@/components/Relic";
+import {Relic, Reveal} from "./Relic";
 import {RELIC} from "@/lib/relics";
 import {spot} from "@/lib/ui";
 
@@ -57,7 +56,7 @@ const FAQ: [string, string][] = [
   ["What does it cost?", "A small network fee each time you act; on this testnet it’s paid in testnet ETH. Buying or selling a piece also pays the pool’s 0.3% fee, and the price may shift by up to 0.5% before your order completes."],
 ];
 
-export default function Learn() {
+export function LearnBody() {
   const [end, setEnd] = useState(2);
   const [qi, setQi] = useState(0);
   const [score, setScore] = useState(0);
@@ -67,14 +66,15 @@ export default function Learn() {
   const res = RES[score >= 5 ? 2 : score >= 3 ? 1 : 0];
 
   return (
-    <Shell strip={false}>
+    <>
       <div className="gridlines">
         <section className="wrap learn-top" style={{paddingBlock: "clamp(56px, 7.8vw, 112px) clamp(48px, 6.6vw, 96px)", borderBottom: "1px solid var(--line)"}}>
-          <div className="stack gap-10"><span className="kicker">F3 · LEARN</span><span className="label" style={{fontSize: 13, lineHeight: 1.6}}>SIX TABLETS · 8 MIN READ</span></div>
+          <div className="stack gap-10"><span className="kicker">F2 · HOW IT WORKS</span><span className="label" style={{fontSize: 13, lineHeight: 1.6}}>NINE TABLETS · 10 MIN READ</span></div>
           <h1 className="display h-xl rise">How a split <span className="px-em">works</span></h1>
           <p className="lead" style={{fontSize: 21}}>One share, one line, one date. Everything else follows from those three things.</p>
           <nav aria-label="Tablets" className="toc">
             {TABLETS.map((t) => <a key={t.id} href={`#${t.id}`}><span>{t.n}</span>{t.title}</a>)}
+            <a href="#sun"><span>☉</span>The Sun, our price source</a>
           </nav>
         </section>
 
@@ -192,6 +192,6 @@ export default function Learn() {
           </div>
         </section>
       </div>
-    </Shell>
+    </>
   );
 }
