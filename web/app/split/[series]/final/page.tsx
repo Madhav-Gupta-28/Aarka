@@ -4,6 +4,7 @@ import Link from "next/link";
 import {useParams} from "next/navigation";
 import {useEffect, useState} from "react";
 import {useAccount} from "wagmi";
+import {BackButton} from "@/components/BackButton";
 import {Mark} from "@/components/Mark";
 import {Countdown, SunRise} from "@/components/Motion";
 import {GearAnim, Relic} from "@/components/Relic";
@@ -46,10 +47,10 @@ export default function FinalPrice() {
       <header className="flow-head">
         <Link href="/" aria-label="Aarka home"><Mark size={32} /></Link>
         <span className="label ctx" style={{fontSize: 13, letterSpacing: ".08em"}}>
-          <Link href="/ledger" style={{color: "inherit", textDecoration: "none"}}>MY LEDGER</Link> / <span style={{color: "var(--text)"}}>{name.toUpperCase()} SPLIT · ${Math.round(K)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
+          <Link href="/app#positions" style={{color: "inherit", textDecoration: "none"}}>WHAT I HOLD</Link> / <span style={{color: "var(--text)"}}>{name.toUpperCase()} SPLIT · ${Math.round(K)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
         </span>
         <span className={`stamp ${badge[1]} ml-auto`}>{badge[0]}</span>
-        <Link href={`/split/${s.series}`} className="btn btn-secondary btn-sm">Back</Link>
+        <BackButton />
       </header>
 
       <main style={{flex: 1}}>
@@ -75,7 +76,7 @@ export default function FinalPrice() {
                   <span className="small" style={{fontSize: 14}}>Floor {money(q.floor)} · Upside {money(q.upside)}</span>
                 </div>
               </div>
-              <div className="row gap-16 wrap-row"><Link href={`/split/${s.series}/trade`} className="btn btn-secondary btn-lg">Sell a piece</Link><Link href={`/split/${s.series}/split?mode=rejoin`} className="btn btn-quiet btn-lg">Put back together</Link></div>
+              <div className="row gap-16 wrap-row"><Link href={`/split/${s.series}?do=sell#act`} className="btn btn-secondary btn-lg">Sell a piece</Link><Link href={`/split/${s.series}?do=rejoin#act`} className="btn btn-quiet btn-lg">Put back together</Link></div>
             </div>
           </section>
         )}
@@ -133,8 +134,8 @@ export default function FinalPrice() {
             </div>
             <div className="stack gap-16" style={{gridColumn: "10 / span 3", paddingTop: 24}}>
               <span className="label">WHAT NEXT</span>
-              <Link href="/markets" className="btn btn-primary btn-lg">Find a new split</Link>
-              <Link href="/ledger" className="btn btn-secondary btn-lg">View my ledger</Link>
+              <Link href="/app" className="btn btn-primary btn-lg">Find a new split</Link>
+              <Link href="/app#positions" className="btn btn-secondary btn-lg">What I hold</Link>
             </div>
           </section>
         )}
@@ -186,7 +187,7 @@ function Waiting({s, name}: {s: {series: `0x${string}`; feed: `0x${string}`; exp
             {tx.busy && <GearAnim size={24} />}{!isConnected ? "Connect to carve the price" : tx.busy ? "Carving…" : "Carve the final price"}
           </button>
         )}
-        <Link href={`/split/${s.series}/split?mode=rejoin`} className="btn btn-secondary btn-lg">Put back together instead</Link>
+        <Link href={`/split/${s.series}?do=rejoin#act`} className="btn btn-secondary btn-lg">Put back together instead</Link>
       </div>
       {cand === "searching" && <span className="label">LOOKING FOR THE ROUND THE RULES ACCEPT…</span>}
       {tx.error && <p role="alert" className="note-line risk">{tx.error}</p>}

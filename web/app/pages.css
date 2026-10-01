@@ -93,7 +93,7 @@
 
 .sd-lower { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
 .sd-lower > :first-child { grid-column: 1 / span 7; display: flex; flex-direction: column; gap: 48px; }
-.sd-lower > aside { grid-column: 9 / span 4; position: sticky; top: 24px; }
+.sd-lower > aside, .sd-lower > #act { grid-column: 9 / span 4; position: sticky; top: 24px; }
 .for-you { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid var(--accent); }
 .for-you > div { padding: 24px 24px 0 0; display: flex; flex-direction: column; gap: 12px; }
 .for-you > div + div { padding: 24px 0 0 24px; border-left: 1px solid var(--line); }
@@ -305,7 +305,7 @@
   .sd-title, .sd-price { grid-column: 1 / -1; align-items: flex-start; text-align: left; }
   .equation { grid-template-columns: 1fr; }
   .eq-op { font-size: 44px; height: 48px; }
-  .sd-lower > :first-child, .sd-lower > aside { grid-column: 1 / -1; position: static; }
+  .sd-lower > :first-child, .sd-lower > aside, .sd-lower > #act { grid-column: 1 / -1; position: static; }
   .flow-body > .main, .flow-body > aside, .flow-body.trade > .main, .flow-body.trade > aside { grid-column: 1 / -1; position: static; }
   .fp-before > :first-child, .fp-before > :last-child, .fp-set > :first-child, .fp-set > :last-child { grid-column: 1 / -1; }
   .quiet > .kicker, .quiet > .stack, .quiet > .card-flat { grid-column: 1 / -1; }

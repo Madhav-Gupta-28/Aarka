@@ -8,24 +8,25 @@ import {robinhoodTestnet} from "@/lib/chain";
 import {quoteFor, stocksOf, useParityAll, useSeries} from "@/lib/data";
 import {endCode, money, short, lineLabel} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
+import {setSound, useSound} from "@/lib/sound";
 import {usePrefs, useReducedMotion} from "@/lib/ui";
+import {BackButton} from "./BackButton";
+import {Keys} from "./Keys";
+import {TeleportLink} from "./Teleport";
 import {Mark} from "./Mark";
 import {Relic} from "./Relic";
 
+/** Two places, not eleven: the app, and how it works. Everything else lives inside one of them. */
 const NAV = [
-  {href: "/", label: "Home", key: ""},
-  {href: "/markets", label: "Markets", key: "F1"},
-  {href: "/ledger", label: "My ledger", key: "F2"},
-  {href: "/learn", label: "Learn", key: "F3"},
-  {href: "/sun", label: "The Sun", key: "F4"},
+  {href: "/", label: "Home", key: "F1"},
+  {href: "/app", label: "App", key: "F2"},
+  {href: "/how", label: "How it works", key: "F3"},
 ];
 
 function activeIndex(path: string) {
   if (path === "/") return 0;
-  if (path.startsWith("/markets") || path.startsWith("/split") || path.startsWith("/practice")) return 1;
-  if (path.startsWith("/ledger")) return 2;
-  if (path.startsWith("/learn")) return 3;
-  if (path.startsWith("/sun")) return 4;
+  if (path.startsWith("/app") || path.startsWith("/split")) return 1;
+  if (path.startsWith("/how")) return 2;
   return -1;
 }
 
@@ -60,12 +61,25 @@ function NavSlab() {
       <span aria-hidden className="ghost" style={{left: H.x, width: H.w, opacity: hov != null && hov !== cur ? 1 : 0}} />
       <span aria-hidden className="slab" style={{left: A.x, width: A.w, opacity: m.length && cur >= 0 ? 1 : 0}} />
       {NAV.map((n, i) => (
-        <Link key={n.href} href={n.href} aria-current={i === cur ? "page" : undefined}
+        <TeleportLink key={n.href} href={n.href} aria-current={i === cur ? "page" : undefined}
               onMouseEnter={() => setHov(i)} onFocus={() => setHov(i)}>
           {n.label}{n.key && <span className="key">{n.key}</span>}
-        </Link>
+        </TeleportLink>
       ))}
     </nav>
+  );
+}
+
+/** Sound on or off. A pixel speaker, with waves when it's on. */
+function SoundButton() {
+  const on = useSound();
+  return (
+    <button className="sound-btn" aria-pressed={on} aria-label={on ? "Sound on. Turn off" : "Sound off. Turn on"} title={on ? "Sound on" : "Sound off"} onClick={() => setSound(!on)}>
+      <svg viewBox="0 0 12 12" width="20" height="20" shapeRendering="crispEdges" aria-hidden>
+        <path fill="currentColor" d="M1 4h2v4H1zM3 3h1v6H3zM4 2h1v8H4zM5 1h1v10H5z" />
+        {on ? <path fill="currentColor" d="M7 5h1v2H7zM8 3h1v1H8zM9 4h1v4H9zM8 8h1v1H8z" /> : <path fill="currentColor" d="M7 4h1v1H7zM8 5h1v1H8zM9 6h1v1H9zM9 4h1v1H9zM7 6h1v1H7z" />}
+      </svg>
+    </button>
   );
 }
 
@@ -73,26 +87,15 @@ export function ViewSwitch() {
   const {view, setView} = usePrefs();
   return (
     <>
-    <button className="view-pill" aria-label={`View: ${view}. Switch view`} onClick={() => setView(view === "simple" ? "terminal" : "simple")}>
-      {view === "simple" ? "SIMPLE" : "TERMINAL"} ⇄
+    <button className="view-pill" aria-label={`View: ${view === "simple" ? "simple" : "pro"}. Switch view`} onClick={() => setView(view === "simple" ? "terminal" : "simple")}>
+      {view === "simple" ? "SIMPLE" : "PRO"} ⇄
     </button>
     <div role="group" aria-label="View" className="seg view" style={{gridAutoColumns: "minmax(0, 1fr)"}}>
       <span aria-hidden className="knob" style={{width: "calc(50% - 4px)", transform: view === "terminal" ? "translateX(100%)" : "none"}} />
       <button aria-pressed={view === "simple"} onClick={() => setView("simple")}>SIMPLE</button>
-      <button aria-pressed={view === "terminal"} onClick={() => setView("terminal")}>TERMINAL</button>
+      <button aria-pressed={view === "terminal"} onClick={() => setView("terminal")}>PRO</button>
     </div>
     </>
-  );
-}
-
-function ThemeButton() {
-  const {theme, setTheme} = usePrefs();
-  const next = theme === "basalt" ? "limestone" : "basalt";
-  return (
-    <button className="icon-btn" onClick={() => setTheme(next)}
-            aria-label={`Theme: ${theme === "basalt" ? "Basalt" : "Limestone"}. Switch to ${next === "basalt" ? "Basalt" : "Limestone"}`}>
-      <span className="theme-dot" />
-    </button>
   );
 }
 
@@ -142,7 +145,7 @@ export function WalletButton({compact}: {compact?: boolean}) {
           }}>
             Copy address <span className="mono muted" style={{fontSize: 12}}>{copied ? "COPIED" : short(address)}</span>
           </button>
-          <Link role="menuitem" href="/ledger" onClick={() => setOpen(false)}>My ledger <span className="mono gold">F2</span></Link>
+          <Link role="menuitem" href="/app#positions" onClick={() => setOpen(false)}>What I hold <span className="mono gold">F2</span></Link>
           <a role="menuitem" href={explorerAddr(address!)} target="_blank" rel="noreferrer">View on explorer <span>↗</span></a>
           <button role="menuitem" onClick={() => { disconnect(); setOpen(false); }}>Disconnect</button>
         </div>
@@ -152,16 +155,23 @@ export function WalletButton({compact}: {compact?: boolean}) {
 }
 
 export function SiteHeader({overlay}: {overlay?: boolean}) {
+  // Simple and Pro only change the app and the split pages, so the switch only shows there.
+  const path = usePathname();
+  const trades = path.startsWith("/app") || path.startsWith("/split");
   return (
     <header className={`site-head${overlay ? " overlay" : ""}`}>
+      <a href="#main" className="skip">Skip to content</a>
       <Link href="/" aria-label="Aarka home" className="brand">
         <Mark size={36} ground={overlay ? "var(--bg)" : "var(--bg)"} />
         <span className="word">AARKA</span>
       </Link>
+      <BackButton />
       <NavSlab />
+      <Keys />
+      <TabBar />
       <div className="head-tools">
-        <ViewSwitch />
-        <ThemeButton />
+        <SoundButton />
+        {trades && <ViewSwitch />}
         <WalletButton />
       </div>
     </header>
@@ -234,15 +244,24 @@ export function PriceStrip() {
   );
 }
 
+/** Two destinations fit in the header on any width, so the mobile tab bar is gone. */
+/** On a phone the top menu doesn't fit, so the same three places sit at the bottom, in thumb reach. */
+const TAB_ICONS: Record<string, string> = {
+  "/": "M2 7h1v6H2zM3 6h1v1H3zM4 5h1v1H4zM5 4h1v1H5zM6 3h2v1H6zM8 4h1v1H8zM9 5h1v1H9zM10 6h1v1h-1zM11 7h1v6h-1zM3 12h8v1H3zM6 9h2v3H6z",
+  "/app": "M4 2h6v1H4zM3 3h1v1H3zM10 3h1v1h-1zM2 4h1v6H2zM11 4h1v6h-1zM3 10h1v1H3zM10 10h1v1h-1zM4 11h6v1H4zM6 4h1v7H6zM7 5h2v1H7zM7 7h2v1H7z",
+  "/how": "M3 2h8v1H3zM2 3h1v9H2zM11 3h1v9h-1zM3 12h8v1H3zM4 5h6v1H4zM4 7h6v1H4zM4 9h4v1H4z",
+};
+
 export function TabBar() {
   const path = usePathname();
   const cur = activeIndex(path);
   return (
-    <nav aria-label="Main" className="tabbar">
-      {NAV.slice(1).map((n, i) => (
-        <Link key={n.href} href={n.href} aria-current={i + 1 === cur ? "page" : undefined}>
-          <span>{n.key}</span>{n.label === "My ledger" ? "LEDGER" : n.label.toUpperCase()}
-        </Link>
+    <nav className="tabbar" aria-label="Main">
+      {NAV.map((n, i) => (
+        <TeleportLink key={n.href} href={n.href} aria-current={i === cur ? "page" : undefined}>
+          <svg viewBox="0 0 14 14" width="22" height="22" shapeRendering="crispEdges" aria-hidden><path fill="currentColor" d={TAB_ICONS[n.href]} /></svg>
+          <span>{n.label}</span>
+        </TeleportLink>
       ))}
     </nav>
   );
@@ -268,8 +287,8 @@ export function FootFull() {
       </div>
       <div className="foot-links">
         <Mark size={24} ground="var(--bg-strip)" />
-        <Link href="/markets">Markets</Link><Link href="/ledger">My ledger</Link><Link href="/learn">Learn</Link>
-        <Link href="/sun">The Sun</Link><Link href="/practice">Practice shares</Link>
+        <Link href="/app">App</Link><Link href="/app#positions">Your positions</Link><Link href="/how">How it works</Link>
+        <Link href="/how#sun">Where prices come from</Link><a href="https://github.com/Madhav-Gupta-28/Aarka" target="_blank" rel="noreferrer">GitHub ↗</a>
         <span className="ml-auto muted">TESTNET · © 2026 AARKA</span>
       </div>
     </footer>
@@ -286,7 +305,6 @@ export function Shell({children, strip = true, full, overlayHead}: {
       {strip && !overlayHead && <PriceStrip />}
       <main id="main">{children}</main>
       {full ? <FootFull /> : <FootCompact />}
-      <TabBar />
     </div>
   );
 }
