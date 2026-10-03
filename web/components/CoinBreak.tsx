@@ -4,7 +4,7 @@ import {play} from "@/lib/sound";
 import {TeleportLink} from "./Teleport";
 import {useEffect, useRef, useState} from "react";
 import {AnimatePresence, motion, useMotionValueEvent, useScroll, useTransform} from "motion/react";
-import {money} from "@/lib/format";
+import {money, lineLabel} from "@/lib/format";
 import {useReducedMotion} from "@/lib/ui";
 
 /**
@@ -229,15 +229,15 @@ export function CoinBreak({floor, upside, spot, strike, name}: {floor?: number; 
     return () => { cancelAnimationFrame(raf); io.disconnect(); window.removeEventListener("resize", size); };
   }, [reduce]);
 
-  const K = strike ? money(strike, 0) : "the line";
+  const K = strike ? `$${lineLabel(strike)}` : "the line";
   const labelsIn = useTransform(scrollYProgress, [0.5, 0.56, 0.64, 0.68], [0, 1, 1, 0], {clamp: true});
 
   const captions = [
-    <><span className="kicker">TABLET I · ONE SHARE</span><h2 className="display cb-h">This is one share of {name}.</h2>{spot ? <p className="lead">Worth <span className="num gold">{money(spot)}</span> today. Keep scrolling.</p> : null}</>,
-    <><span className="kicker">TABLET II · THE LINE</span><h2 className="display cb-h">Pick a price. Say {K}.</h2><p className="lead">That price is where the share gets split, and it never moves.</p></>,
-    <><span className="kicker">TABLET III · THE SPLIT</span><h2 className="display cb-h">The share breaks <span className="px-em">clean</span> at the line.</h2><p className="lead">Two tokens now, from one. Nothing is borrowed, so nothing can be liquidated.</p></>,
-    <><span className="kicker">TABLET IV · TWO HALVES</span><h2 className="display cb-h">The Floor keeps the value up to it.</h2><p className="lead">The Upside gets everything above it. Below the line it&apos;s worth nothing, which is why it&apos;s hollow.</p></>,
-    <><span className="kicker">TABLET V · YOUR CALL</span><h2 className="display cb-h">Keep one. Sell the other.</h2><p className="lead">Or hold both and put them back together into one share, any time you like.</p><TeleportLink href="/app" className="btn btn-primary btn-lg" style={{marginTop: 8}}>Choose your half</TeleportLink></>,
+    <><span className="kicker">I · ONE SHARE</span><h2 className="display cb-h">This is one share of {name}.</h2>{spot ? <p className="lead">Worth <span className="num gold">{money(spot)}</span> today.</p> : null}</>,
+    <><span className="kicker">II · THE LINE</span><h2 className="display cb-h">Pick a price. Say {K}.</h2><p className="lead">That&apos;s the line. It never moves.</p></>,
+    <><span className="kicker">III · THE SPLIT</span><h2 className="display cb-h">It breaks <span className="px-em">clean</span> at the line.</h2><p className="lead">One share in, two tokens out. Nothing borrowed.</p></>,
+    <><span className="kicker">IV · TWO HALVES</span><h2 className="display cb-h">Floor up to the line. Upside above it.</h2></>,
+    <><span className="kicker">V · YOUR CALL</span><h2 className="display cb-h">Keep one. Sell the other.</h2><p className="lead">Or put them back together, any time.</p><TeleportLink href="/app" className="btn btn-primary btn-lg" style={{marginTop: 8}}>Choose your half</TeleportLink></>,
   ];
 
   return (

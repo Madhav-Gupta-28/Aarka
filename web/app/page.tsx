@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {motion, useScroll, useTransform} from "motion/react";
 import {useRef} from "react";
-import {FootFull, PriceStrip, SiteHeader} from "@/components/Chrome";
+import {FootFull, SiteHeader} from "@/components/Chrome";
 import {CoinBreak} from "@/components/CoinBreak";
 import {Magnetic, Rise, SmoothScroll, WordReveal} from "@/components/Kinetic";
 import {Relic, SunAnim} from "@/components/Relic";
@@ -25,6 +25,8 @@ export default function Home() {
   const s = pickFeatured(rows);
   const q = s ? quoteFor(s, parity) : undefined;
   const name = s ? stockName(s.underlyingSymbol) : "NVIDIA";
+  // What one share is worth in the same pools the halves trade in, so the sum on screen always adds up.
+  const worth = q ? (q.source === "market" ? q.floor + q.upside : q.spot) : undefined;
 
   const hero = useRef<HTMLElement>(null);
   const {scrollYProgress} = useScroll({target: hero, offset: ["start start", "end start"]});
@@ -45,13 +47,12 @@ export default function Home() {
           <motion.div className="hero-copy wrap" style={{y: copyY, opacity: fade}}>
             <motion.div className="row gap-12 wrap-row" initial={reduce ? false : {opacity: 0, y: 12}} animate={{opacity: 1, y: 0}} transition={{delay: 0.2}}>
               <span className="stamp stamp-practice">LIVE ON TESTNET</span>
-              <span className="label" style={{letterSpacing: ".14em"}}>ONE SHARE · TWO HALVES · NO LIQUIDATIONS</span>
             </motion.div>
             <WordReveal as="h1" className="display h-hero">
               Split a stock into a floor and <span className="px-em">the upside.</span>
             </WordReveal>
             <motion.p className="lead" style={{maxWidth: 540}} initial={reduce ? false : {opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.9, duration: 0.8}}>
-              Earn cash on the shares you hold, or bet on a rise for a fraction of the price. Put the two halves back together anytime.
+              Keep the Floor and take cash today, or buy the Upside and bet on a rise.
             </motion.p>
             <motion.div className="row gap-16 wrap-row" initial={reduce ? false : {opacity: 0, y: 16}} animate={{opacity: 1, y: 0}} transition={{delay: 1.1}}>
               <Magnetic><TeleportLink href="/app" className="btn btn-primary btn-lg">Choose your half →</TeleportLink></Magnetic>
@@ -59,65 +60,38 @@ export default function Home() {
             </motion.div>
             {q && (
               <motion.div className="hero-quote mono" initial={reduce ? false : {opacity: 0}} animate={{opacity: 1}} transition={{delay: 1.4}}>
-                {s!.underlyingSymbol} <span className="gold">{money(q.spot)}</span> = Floor <span className="gold">{money(q.floor)}</span> + Upside <span className="gold">{money(q.upside)}</span>
+                Floor <span className="gold">{money(q.floor)}</span> + Upside <span className="gold">{money(q.upside)}</span> = <span className="gold">{money(worth!)}</span>, one {s!.underlyingSymbol} share
               </motion.div>
             )}
           </motion.div>
-          <span className="fig label">FIG. 1 · THE SUN ON ITS ALTAR · MOVE YOUR CURSOR</span>
           <div className="scroll-cue" aria-hidden><span /></div>
         </section>
-        <PriceStrip />
 
         <div id="split">
-          <CoinBreak name={name} spot={q?.spot} strike={q?.strike} floor={q?.floor} upside={q?.upside} />
+          <CoinBreak name={name} spot={worth} strike={q?.strike} floor={q?.floor} upside={q?.upside} />
         </div>
-
-        <section className="section-tight rule-top gridlines open-app">
-          <div className="wrap open-app-inner">
-            <div className="stack gap-16">
-              <span className="kicker">THE APP · NO SIGN-UP · FREE PRACTICE SHARES</span>
-              <WordReveal className="display h-sub">Two buttons. <span className="em">Pick one.</span></WordReveal>
-              <p className="lead" style={{maxWidth: 520}}>Earn cash on the shares you hold, or bet on a rise for a fraction of the price. It takes about a minute.</p>
-            </div>
-            <div className="open-app-cards">
-              {[
-                {t: "Earn cash on my shares", d: "You keep the Floor", r: "coinFloor"},
-                {t: "Bet on a rise", d: "You buy the Upside", r: "coinUp"},
-              ].map((c, i) => (
-                <Rise key={c.t} delay={i * 90}>
-                  <TeleportLink href="/app" className="card spot lift open-app-card" {...spot}>
-                    <Relic name={c.r as never} size={56} />
-                    <strong className="display" style={{fontSize: 28, lineHeight: 1.05}}>{c.t}</strong>
-                    <span className="mono muted" style={{fontSize: 12, letterSpacing: ".12em"}}>{c.d.toUpperCase()} →</span>
-                  </TeleportLink>
-                </Rise>
-              ))}
-            </div>
-          </div>
-        </section>
 
         <section className="section-tight rule-top deep">
           <div className="wrap stack gap-32">
             <WordReveal className="display h-sub">Built so nobody has to <span className="em">trust us.</span></WordReveal>
             <div className="trust4">
               {[
-                {r: <SunAnim size={64} alt="The Sun" />, t: "Independent prices", d: "Every final price comes from Chainlink. Nobody at Aarka can set or change it.", href: "/how#sun"},
-                {r: <Relic name="scales" size={64} />, t: "Always adds up", d: "Floor + Upside is exactly one share, forever. A Uniswap v4 hook keeps their prices honest.", href: "/how#halves"},
-                {r: <Relic name="stele" size={64} />, t: "Nothing to liquidate", d: "There is no borrowing anywhere, so there are no margin calls. Ever.", href: "/how#risks"},
-                {r: <Relic name="coinFull" size={64} />, t: "Always reversible", d: "Hold both halves and you can rejoin them into a share at any moment. That never switches off.", href: "/how#halves"},
+                {r: <SunAnim size={64} alt="The Sun" />, t: "Independent prices", d: "Final prices come from Chainlink, not us.", href: "/how#sun"},
+                {r: <Relic name="scales" size={64} />, t: "Always adds up", d: "Floor + Upside = one share. A Uniswap v4 hook enforces it.", href: "/how#scales"},
+                {r: <Relic name="stele" size={64} />, t: "Nothing to liquidate", d: "No borrowing, so no margin calls.", href: "/how#risks"},
+                {r: <Relic name="coinFull" size={64} />, t: "Always reversible", d: "Rejoin both halves into a share, any time.", href: "/how#halves"},
               ].map((c, i) => (
                 <Rise key={c.t} delay={i * 90}>
                   <Link href={c.href} className="card spot lift trust-card2" {...spot}>
                     {c.r}
                     <strong className="display" style={{fontSize: 26, lineHeight: 1.1}}>{c.t}</strong>
                     <span className="small">{c.d}</span>
-                    <span className="mono lapis" style={{fontSize: 12, marginTop: "auto"}}>READ HOW →</span>
                   </Link>
                 </Rise>
               ))}
             </div>
             <Rise className="row gap-16 wrap-row">
-              <Link href="/how" className="btn btn-secondary">How it works, start to finish</Link>
+              <Link href="/how" className="btn btn-secondary">How it works</Link>
               <a href="https://github.com/Madhav-Gupta-28/Aarka" target="_blank" rel="noreferrer" className="btn btn-quiet">Contracts & audits on GitHub ↗</a>
             </Rise>
           </div>

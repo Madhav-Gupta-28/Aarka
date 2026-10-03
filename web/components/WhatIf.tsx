@@ -2,7 +2,7 @@
 
 import {useCallback, useRef, useState} from "react";
 import {RELIC} from "@/lib/relics";
-import {delta, money} from "@/lib/format";
+import {delta, money, lineLabel} from "@/lib/format";
 import {Relic} from "./Relic";
 
 /** Price range for the slider: roughly half the line to two thirds above it, in $10 steps. */
@@ -56,7 +56,7 @@ export function PayoffChart({strike, price, min, max, spot, compact, terminal, l
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{width: "100%", height: "auto", display: "block"}} role="img"
-         aria-label={`Line chart: Floor value rises with price until ${money(strike, 0)}, then stays flat. Upside is $0 until ${money(strike, 0)}, then rises with price. Marker at ${money(price)}: Floor ${money(floor)}, Upside ${money(upside)}.`}>
+         aria-label={`Line chart: Floor value rises with price until $${lineLabel(strike)}, then stays flat. Upside is $0 until $${lineLabel(strike)}, then rises with price. Marker at ${money(price)}: Floor ${money(floor)}, Upside ${money(upside)}.`}>
       <defs>
         <pattern id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="1.5" height="6" fill="var(--accent)" />

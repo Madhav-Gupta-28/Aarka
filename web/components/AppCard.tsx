@@ -15,22 +15,16 @@ import {CashFaucet, ShareFaucet} from "./Faucets";
 import {Magnetic, Pills} from "./Kinetic";
 import {DigitRoll} from "./Motion";
 import {Moment, type Done} from "./Moment";
-import {Tour, type Step} from "./Tour";
 import {GearAnim, Relic} from "./Relic";
 import {WhatIfTrack, payoff, useWhatIf} from "./WhatIf";
 
 type Intent = "earn" | "bet";
 
 const INTENTS: {id: Intent; title: string; line: string; keep: string; relics: [string, string]}[] = [
-  {id: "earn", title: "Earn cash on my shares", line: "Keep the stock's value up to a price. Sell everything above it for cash today.", keep: "You keep the Floor", relics: ["coinFloor", "cash"]},
-  {id: "bet", title: "Bet on a rise", line: "Pay a fraction of a share. Get every dollar the stock ends above a price.", keep: "You buy the Upside", relics: ["cash", "coinUp"]},
+  {id: "earn", title: "Earn cash on my shares", line: "Keep the value up to a price. Sell the rest for cash today.", keep: "You keep the Floor", relics: ["coinFloor", "cash"]},
+  {id: "bet", title: "Bet on a rise", line: "Pay a fraction of a share. Get every dollar above a price.", keep: "You buy the Upside", relics: ["cash", "coinUp"]},
 ];
 
-const TOUR: Step[] = [
-  {sel: ".intents", kicker: "START HERE", title: "What do you want?", body: "Earn cash on shares you already hold, or bet on a rise for a fraction of a share. You can switch any time."},
-  {sel: "[data-tour=line]", kicker: "THE LINE", title: "Pick where the share splits.", body: "The Floor is worth the stock up to this price. The Upside is worth everything above it. Each line has an end date."},
-  {sel: ".app-out", kicker: "WHAT YOU GET", title: "See it before you do it.", body: "This updates as you type. Nothing moves until you press the button and confirm in your wallet. It's all test money."},
-];
 
 /** The splits a person can act on right now: open, and with pools to trade against. */
 function tradable(rows: SeriesView[] | undefined, parity: Record<string, Parity> | undefined, sym: string) {
@@ -113,7 +107,6 @@ export function AppCard() {
     <section id="app" className="app section-tight rule-top gridlines" aria-label="Choose your half">
       <div className="wrap app-wrap">
         <div className="app-head">
-          <span className="kicker">THE APP · NO SIGN-UP</span>
           <h2 className="display h-sub">Choose your <span className="em">half.</span></h2>
           <Pills id="stock" value={sym} onChange={setSym}
                  options={(stocks.length ? stocks : [{symbol: "NVDA", spot: 0}, {symbol: "TSLA", spot: 0}]).map((st) => ({
@@ -130,7 +123,6 @@ export function AppCard() {
               </span>
               <strong className="display intent-title">{it.title}</strong>
               <span className="small">{it.line}</span>
-              <span className="stamp stamp-practice intent-keep">{it.keep}</span>
             </button>
           ))}
         </div>
@@ -138,13 +130,13 @@ export function AppCard() {
         <div className="app-body">
           <div className="app-form">
             <div className="stack gap-10" data-tour="line">
-              <span className="label">PRICE LINE · WHERE THE SHARE IS SPLIT</span>
+              <span className="label">PRICE LINE · END DATE</span>
               {options.length ? (
                 <Pills id="line" value={s?.series ?? ""} onChange={(v) => setSeriesAddr(v)}
                        options={options.map((o) => ({
                          value: o.series,
                          label: `$${lineLabel(Number(o.strike) / 1e8)}`,
-                         sub: `${endShort(o.expiry)} · ${countdown(o.expiry)}`,
+                         sub: endShort(o.expiry),
                        }))} />
               ) : (
                 <div className="skel" style={{height: 52}} />
@@ -221,14 +213,13 @@ export function AppCard() {
 
         {s && (
           <div className="app-more row gap-16 wrap-row">
-            <Link href={`/split/${s.series}`} className="mono" style={{fontSize: 13}}>Full details of this split →</Link>
-            <span className="mono muted" style={{fontSize: 13}}>Ends {countdown(s.expiry)} · settles on {endShort(s.expiry)} at {new Date(Number(s.expiry) * 1000).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", timeZone: "America/New_York"})} New York time</span>
+            <Link href={`/split/${s.series}`} className="mono" style={{fontSize: 13}}>Split details →</Link>
+            <span className="mono muted" style={{fontSize: 13}}>Ends {endShort(s.expiry)}, 4:00 PM New York · {countdown(s.expiry)} left</span>
             {Number(s.expiry) - nowSec() < 86400 && <span className="stamp stamp-delayed">ENDS WITHIN A DAY</span>}
           </div>
         )}
       </div>
       <Moment done={done} onClose={closeMoment} />
-      {!done && <Tour steps={TOUR} />}
     </section>
   );
 }

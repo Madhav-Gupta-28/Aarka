@@ -6,7 +6,7 @@ import type {Balances, Quote} from "@/lib/data";
 import {useRounds} from "@/lib/data";
 import type {SeriesView} from "@/lib/lens";
 import {marketFor} from "@/lib/contracts";
-import {cleanAmount, countdown, endCode, money, qty, short} from "@/lib/format";
+import {cleanAmount, countdown, endCode, money, qty, short, lineLabel} from "@/lib/format";
 import {PANEL_TABS} from "./ActionPanel";
 import {GearAnim} from "./Relic";
 import {PayoffChart, WhatIfTrack, payoff, useWhatIf} from "./WhatIf";
@@ -124,7 +124,7 @@ export function TerminalSplit({s, q, bal, w}: {s: SeriesView; q: Quote; bal?: Ba
             <span>FLOOR TOKEN</span><span>{s.floorSymbol}</span>
             <span>UPSIDE TOKEN</span><span>{s.upsideSymbol}</span>
             <span>CONTRACT</span><span>{short(s.series)}</span>
-            <span>PAYOFF</span><span>F=min(P,{Math.round(K)}) · U=max(P−{Math.round(K)},0)</span>
+            <span>PAYOFF</span><span>F=min(P,{lineLabel(K)}) · U=max(P−{lineLabel(K)},0)</span>
             <span>SCALES</span><span className={marketFor(s.series) ? "up" : "muted"}>{marketFor(s.series) ? `HOOK ${short(marketFor(s.series))}` : "NO POOLS"}</span>
             <span>SLIPPAGE</span><span>0.50% max</span>
           </div>

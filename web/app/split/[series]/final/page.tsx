@@ -4,7 +4,6 @@ import Link from "next/link";
 import {useParams} from "next/navigation";
 import {useEffect, useState} from "react";
 import {useAccount} from "wagmi";
-import {BackButton} from "@/components/BackButton";
 import {Mark} from "@/components/Mark";
 import {Countdown, SunRise} from "@/components/Motion";
 import {GearAnim, Relic} from "@/components/Relic";
@@ -47,10 +46,10 @@ export default function FinalPrice() {
       <header className="flow-head">
         <Link href="/" aria-label="Aarka home"><Mark size={32} /></Link>
         <span className="label ctx" style={{fontSize: 13, letterSpacing: ".08em"}}>
-          <Link href="/app#positions" style={{color: "inherit", textDecoration: "none"}}>WHAT I HOLD</Link> / <span style={{color: "var(--text)"}}>{name.toUpperCase()} SPLIT · ${Math.round(K)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
+          <Link href="/app#positions" style={{color: "inherit", textDecoration: "none"}}>WHAT I HOLD</Link> / <span style={{color: "var(--text)"}}>{name.toUpperCase()} SPLIT · ${lineLabel(K)} LINE · ENDS {endShort(s.expiry).toUpperCase()}</span>
         </span>
         <span className={`stamp ${badge[1]} ml-auto`}>{badge[0]}</span>
-        <BackButton />
+        <Link href="/app#positions" className="btn btn-secondary btn-sm">Back</Link>
       </header>
 
       <main style={{flex: 1}}>

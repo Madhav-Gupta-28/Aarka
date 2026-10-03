@@ -8,9 +8,7 @@ import {robinhoodTestnet} from "@/lib/chain";
 import {quoteFor, stocksOf, useParityAll, useSeries} from "@/lib/data";
 import {endCode, money, short, lineLabel} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
-import {setSound, useSound} from "@/lib/sound";
 import {usePrefs, useReducedMotion} from "@/lib/ui";
-import {BackButton} from "./BackButton";
 import {Keys} from "./Keys";
 import {TeleportLink} from "./Teleport";
 import {Mark} from "./Mark";
@@ -63,23 +61,10 @@ function NavSlab() {
       {NAV.map((n, i) => (
         <TeleportLink key={n.href} href={n.href} aria-current={i === cur ? "page" : undefined}
               onMouseEnter={() => setHov(i)} onFocus={() => setHov(i)}>
-          {n.label}{n.key && <span className="key">{n.key}</span>}
+          {n.label}
         </TeleportLink>
       ))}
     </nav>
-  );
-}
-
-/** Sound on or off. A pixel speaker, with waves when it's on. */
-function SoundButton() {
-  const on = useSound();
-  return (
-    <button className="sound-btn" aria-pressed={on} aria-label={on ? "Sound on. Turn off" : "Sound off. Turn on"} title={on ? "Sound on" : "Sound off"} onClick={() => setSound(!on)}>
-      <svg viewBox="0 0 12 12" width="20" height="20" shapeRendering="crispEdges" aria-hidden>
-        <path fill="currentColor" d="M1 4h2v4H1zM3 3h1v6H3zM4 2h1v8H4zM5 1h1v10H5z" />
-        {on ? <path fill="currentColor" d="M7 5h1v2H7zM8 3h1v1H8zM9 4h1v4H9zM8 8h1v1H8z" /> : <path fill="currentColor" d="M7 4h1v1H7zM8 5h1v1H8zM9 6h1v1H9zM9 4h1v1H9zM7 6h1v1H7z" />}
-      </svg>
-    </button>
   );
 }
 
@@ -165,12 +150,10 @@ export function SiteHeader({overlay}: {overlay?: boolean}) {
         <Mark size={36} ground={overlay ? "var(--bg)" : "var(--bg)"} />
         <span className="word">AARKA</span>
       </Link>
-      <BackButton />
       <NavSlab />
       <Keys />
       <TabBar />
       <div className="head-tools">
-        <SoundButton />
         {trades && <ViewSwitch />}
         <WalletButton />
       </div>
@@ -271,7 +254,6 @@ export function FootCompact() {
   return (
     <footer className="foot">
       <Mark size={24} ground="var(--bg-strip)" />
-      <span className="long">NO BORROWING · NOBODY CAN FORCE-SELL YOUR POSITION · PUT BACK TOGETHER ANYTIME</span>
       <span className="ml-auto">TESTNET · PRACTICE SHARES HAVE NO CASH VALUE · © 2026 AARKA</span>
     </footer>
   );
@@ -280,15 +262,10 @@ export function FootCompact() {
 export function FootFull() {
   return (
     <footer className="foot-full">
-      <div className="promises">
-        <p>Aarka never borrows against your shares, so nobody can force-sell your position.</p>
-        <p>Final prices come from The Sun, an independent public price source.</p>
-        <p>You can always put your Floor and Upside back together into one share.</p>
-      </div>
       <div className="foot-links">
         <Mark size={24} ground="var(--bg-strip)" />
         <Link href="/app">App</Link><Link href="/app#positions">Your positions</Link><Link href="/how">How it works</Link>
-        <Link href="/how#sun">Where prices come from</Link><a href="https://github.com/Madhav-Gupta-28/Aarka" target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a href="https://github.com/Madhav-Gupta-28/Aarka" target="_blank" rel="noreferrer">GitHub ↗</a>
         <span className="ml-auto muted">TESTNET · © 2026 AARKA</span>
       </div>
     </footer>
@@ -296,7 +273,7 @@ export function FootFull() {
 }
 
 /** The frame every regular page shares. */
-export function Shell({children, strip = true, full, overlayHead}: {
+export function Shell({children, strip = false, full, overlayHead}: {
   children: React.ReactNode; strip?: boolean; full?: boolean; overlayHead?: boolean;
 }) {
   return (
