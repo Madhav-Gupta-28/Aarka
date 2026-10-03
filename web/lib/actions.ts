@@ -7,7 +7,7 @@ import {robinhoodTestnet} from "./chain";
 import {ADDRESSES, ROUTER_ABI, SERIES_ABI, TOKEN_ABI, hookedPoolKey, marketFor} from "./contracts";
 import type {Balances, Quote} from "./data";
 import type {SeriesView} from "./lens";
-import {endShort, money, n18, n6, parseAmount, plural, qty, stockName, lineLabel} from "./format";
+import {money, n18, n6, parseAmount, plural, qty, stockName, lineLabel} from "./format";
 import {useTx} from "./tx";
 
 /**
@@ -120,15 +120,6 @@ export function useAction({s, q, bal, kind, piece, amount}: {
 
   const useMax = () => (cashIn ? formatUnits(holding, 6) : formatUnits(holding, 18));
 
-  // The receipt, in the voice of the ledger.
-  const end = s ? endShort(s.expiry) : "";
-  const receipt = () => {
-    if (kind === "split") return {title: `Split ${qty(n)} ${name} ${pl("share")}`, body: `Got ${qty(n)} ${pl("Floor")} and ${qty(n)} ${pl("Upside")}. $${K} line, ends ${end}.`, amount: money((q?.spot ?? 0) * n), icon: "coinFull" as const};
-    if (kind === "rejoin") return {title: `Put ${qty(n)} ${pl("pair")} back together`, body: `${qty(n)} Floor + ${qty(n)} Upside became ${qty(n)} ${name} ${pl("share")} again.`, amount: money((q?.spot ?? 0) * n), icon: "coinFull" as const};
-    if (kind === "buy") return {title: `Bought ${name} ${plural(piecesOut, pieceName)}`, body: `About ${qty(piecesOut, 3)}. $${K} line, ends ${end}.`, amount: "−" + money(n), icon: piece === "floor" ? "coinFloor" as const : "coinUp" as const};
-    if (kind === "sell") return {title: `Sold ${qty(n)} ${name} ${pl(pieceName)}`, body: "The cash is in your wallet.", amount: "+" + money(cashOut), icon: piece === "floor" ? "coinFloor" as const : "coinUp" as const};
-    return {title: `Kept the ${keptName}, sold the ${piece === "floor" ? "Floor" : "Upside"}`, body: `Split ${qty(n)} ${name} ${pl("share")}. $${K} line, ends ${end}.`, amount: "+" + money(cashOut), icon: "cash" as const};
-  };
   const toastText = () => {
     if (kind === "split") return {toast: "Split complete", body: `You now hold ${qty(n)} ${pl("Floor")} and ${qty(n)} ${pl("Upside")}.`};
     if (kind === "rejoin") return {toast: "Put back together", body: `You now hold ${qty(n)} more ${name} ${pl("share")}.`};
@@ -144,7 +135,7 @@ export function useAction({s, q, bal, kind, piece, amount}: {
 
   async function submit() {
     if (!s || !address || wei === 0n) return null;
-    const done = {...toastText(), receipt: receipt()};
+    const done = toastText();
     if (kind === "split") return tx.run({address: s.series, abi: SERIES_ABI, functionName: "mint", args: [wei, address]}, done);
     if (kind === "rejoin") return tx.run({address: s.series, abi: SERIES_ABI, functionName: "redeem", args: [wei, address]}, done);
     if (!hook) return null;

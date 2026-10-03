@@ -3,7 +3,6 @@
  *
  * Every relic is a grid of palette keys turned into a crisp SVG data URI, so nothing here is a
  * bitmap asset and every relic scales by whole numbers with `image-rendering: pixelated`.
- * Ported from the Claude Design foundations file; the shapes are the same pixel for pixel.
  */
 
 type Cell = 0 | "b" | "s" | "z" | "o" | "y" | "l";
@@ -287,9 +286,6 @@ function lock(): Grid {
   return g;
 }
 
-/** A 16px dither swatch between two palette colours, for skeletons and plinths. */
-const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-
 // ---- exports ----------------------------------------------------------------------------------
 
 const astroCache = new Map<number, string>();
@@ -326,8 +322,3 @@ export const RELIC = (() => {
   };
 })();
 
-export function ditherUrl(level: number, a: Exclude<Cell, 0>, b: Exclude<Cell, 0>) {
-  const g = G(16);
-  each(g, (x, y) => put(g, x, y, BAYER[y % 4][x % 4] < level * 16 ? a : b));
-  return url(g);
-}

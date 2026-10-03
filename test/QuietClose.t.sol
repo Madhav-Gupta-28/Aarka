@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {BaseTest} from "./Base.t.sol";
 import {AarkaSeries} from "../src/AarkaSeries.sol";
 import {AarkaFactory} from "../src/AarkaFactory.sol";
-import {AarkaToken} from "../src/AarkaToken.sol";
 import {PlainToken} from "./mocks/MockStockToken.sol";
 import {AggregatorV3Interface} from "../src/interfaces/IExternal.sol";
 

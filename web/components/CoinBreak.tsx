@@ -1,6 +1,5 @@
 "use client";
 
-import {play} from "@/lib/sound";
 import {TeleportLink} from "./Teleport";
 import {useEffect, useRef, useState} from "react";
 import {AnimatePresence, motion, useMotionValueEvent, useScroll, useTransform} from "motion/react";
@@ -127,14 +126,10 @@ export function CoinBreak({floor, upside, spot, strike, name}: {floor?: number; 
   // opacity drifts at the ends of the range, and a caption half-visible behind the next one is
   // worse than a clean swap.
   const [chapter, setChapter] = useState(0);
-  const heard = useRef(0);
   useMotionValueEvent(scrollYProgress, "change", (v) => {
     progress.current = v;
     let c = 0;
     for (let i = 0; i < CHAPTERS.length; i++) if (v >= CHAPTERS[i]) c = i;
-    // The coin is heard as well as seen, but only going forward: scrolling back is rewinding.
-    if (c > heard.current) play(c === 1 ? "crack" : c === 4 ? "chime" : "clink");
-    heard.current = Math.max(heard.current, c);
     setChapter(c);
   });
 

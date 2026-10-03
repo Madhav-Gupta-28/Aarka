@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test, console} from "forge-std/Test.sol";
-import {DeployTestnet} from "../script/DeployTestnet.s.sol";
+import {Test} from "forge-std/Test.sol";
 import {AarkaFactory} from "../src/AarkaFactory.sol";
 import {AarkaSeries} from "../src/AarkaSeries.sol";
 import {ExpiryCalendar} from "../src/ExpiryCalendar.sol";

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {AnimatePresence, motion} from "motion/react";
-import {useAccount} from "wagmi";
+import {useAccount, useBalance} from "wagmi";
+import {FAUCET_URL} from "@/lib/chain";
 import {useAction} from "@/lib/actions";
 import {marketFor} from "@/lib/contracts";
 import {quoteFor, stocksOf, useBalances, useParityAll, useSeries, type Parity} from "@/lib/data";
@@ -53,7 +54,10 @@ export function AppCard() {
   })();
   const q = s ? quoteFor(s, parity) : undefined;
   const {data: bal} = useBalances(s);
-  const {isConnected} = useAccount();
+  const {isConnected, address} = useAccount();
+  // A wallet with no ETH cannot pay the fee for anything, not even the free shares, so say where to get it first.
+  const {data: gas} = useBalance({address, query: {enabled: !!address, refetchInterval: 15_000}});
+  const noGas = isConnected && !!gas && gas.value === 0n;
 
   const kind = intent === "earn" ? "splitSell" : "buy";
   const a = useAction({s, q, bal, kind, piece: "upside", amount});
@@ -172,10 +176,19 @@ export function AppCard() {
             </div>
 
             <AnimatePresence>
-              {(noShares || noCash) && s && (
+              {(noGas || noShares || noCash) && s && (
                 <motion.div className="app-faucet" initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: "auto"}} exit={{opacity: 0, height: 0}}>
-                  <p className="small">{noShares ? `No ${name} in this wallet yet. Practice shares are free and follow the real price.` : "No practice cash yet. It's free, and it's all test money."}</p>
-                  {noShares ? <ShareFaucet symbol={s.underlyingSymbol} token={s.underlying} spot={q?.spot ?? 0} /> : <CashFaucet />}
+                  {noGas ? (
+                    <>
+                      <p className="small">This wallet has no test ETH, which every action needs for its network fee. The Robinhood Chain faucet gives it away.</p>
+                      <a className="btn btn-secondary btn-block" href={FAUCET_URL} target="_blank" rel="noreferrer">Get test ETH ↗</a>
+                    </>
+                  ) : (
+                    <>
+                      <p className="small">{noShares ? `No ${name} in this wallet yet. Practice shares are free and follow the real price.` : "No practice cash yet. It's free, and it's all test money."}</p>
+                      {noShares ? <ShareFaucet symbol={s.underlyingSymbol} token={s.underlying} spot={q?.spot ?? 0} /> : <CashFaucet />}
+                    </>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

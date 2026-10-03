@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {Script, console} from "forge-std/Script.sol";
 import {AarkaFactory} from "../src/AarkaFactory.sol";
 import {AarkaLens} from "../src/AarkaLens.sol";
-import {AarkaSeries} from "../src/AarkaSeries.sol";
 import {ExpiryCalendar} from "../src/ExpiryCalendar.sol";
 import {AarkaRouter} from "../src/periphery/AarkaRouter.sol";
 import {StreamsAggregator, IVerifierProxy} from "../src/adapters/StreamsAggregator.sol";

@@ -10,7 +10,6 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
-import {MockStockToken} from "../mocks/MockStockToken.sol";
 
 /// @notice The one-transaction product flow, against the same hooked pools the parity tests use.
 contract AarkaRouterTest is HookBaseTest {

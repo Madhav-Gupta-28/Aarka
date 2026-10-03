@@ -2,8 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {console} from "forge-std/Test.sol";
-import {HookBaseTest, MockUSDG} from "./HookBase.t.sol";
-import {AarkaParityHook} from "../../src/hook/AarkaParityHook.sol";
+import {HookBaseTest} from "./HookBase.t.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";

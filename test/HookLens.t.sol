@@ -5,7 +5,6 @@ import {HookBaseTest} from "./hook/HookBase.t.sol";
 import {HookLens} from "../src/HookLens.sol";
 import {AarkaParityHook} from "../src/hook/AarkaParityHook.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 
 /// @notice HookLens is what the site's parity panel reads. It had no tests (AUDIT-22).

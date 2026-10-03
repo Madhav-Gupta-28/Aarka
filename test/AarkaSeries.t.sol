@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {BaseTest} from "./Base.t.sol";
 import {AarkaSeries} from "../src/AarkaSeries.sol";
-import {AarkaToken} from "../src/AarkaToken.sol";
 
 contract AarkaSeriesTest is BaseTest {
     // ---------------------------------------------------------------- naming

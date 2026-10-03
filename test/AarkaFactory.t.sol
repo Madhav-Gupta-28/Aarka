@@ -7,7 +7,7 @@ import {AarkaSeries} from "../src/AarkaSeries.sol";
 import {ExpiryCalendar} from "../src/ExpiryCalendar.sol";
 import {AggregatorV3Interface} from "../src/interfaces/IExternal.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
-import {MockStockToken, PlainToken, FeeOnTransferToken} from "./mocks/MockStockToken.sol";
+import {PlainToken, FeeOnTransferToken} from "./mocks/MockStockToken.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract AarkaFactoryTest is BaseTest {

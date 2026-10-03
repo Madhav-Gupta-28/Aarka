@@ -21,7 +21,7 @@ export function ShareFaucet({symbol, token, spot: px}: {symbol: string; token: `
   return (
     <button className="btn btn-primary btn-block" disabled={!ok || tx.busy || wait > 0}
             onClick={() => tx.run({address: token, abi: TOKEN_ABI, functionName: "claim"},
-              {toast: `100 practice ${stockName(symbol)} shares are yours`, body: `Worth ${money(100 * px)} at today's price, in practice.`, receipt: {title: `Got 100 practice ${stockName(symbol)} shares`, body: "Free, marked PRACTICE. They follow real prices.", amount: "100 shares", icon: "tablet"}})}>
+              {toast: `100 practice ${stockName(symbol)} shares are yours`, body: `Worth ${money(100 * px)} at today's price, in practice.`})}>
       {tx.busy && <GearAnim size={24} />}
       {!ok ? `100 ${stockName(symbol)} · connect first` : tx.busy ? "Claiming…" : wait > 0 ? `${stockName(symbol)} again in ${Math.ceil(wait / 60)} min` : `Claim 100 ${stockName(symbol)}`}
     </button>
@@ -35,7 +35,7 @@ export function CashFaucet() {
   return (
     <button className="btn btn-up btn-block" disabled={!ok || tx.busy}
             onClick={() => tx.run({address: ADDRESSES.usdg as `0x${string}`, abi: TOKEN_ABI, functionName: "mint", args: [address!, 100_000_000_000n]},
-              {toast: "$100,000 in practice cash", body: "Use it to buy a Floor or an Upside.", receipt: {title: "Got $100,000 practice cash", body: "Test USDG, no value.", amount: "$100,000", icon: "cash"}})}>
+              {toast: "$100,000 in practice cash", body: "Use it to buy a Floor or an Upside."})}>
       {tx.busy && <GearAnim size={24} />}{!ok ? "Connect first" : tx.busy ? "Minting…" : "Get $100,000 practice cash"}
     </button>
   );

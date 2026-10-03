@@ -2,7 +2,6 @@
 
 import {AnimatePresence, motion} from "motion/react";
 import {useEffect, useRef, useState} from "react";
-import {play} from "@/lib/sound";
 import {downloadCard, shareCard, type Card} from "@/lib/shareCard";
 import {explorerTx} from "@/lib/tx";
 import {useReducedMotion} from "@/lib/ui";
@@ -32,7 +31,6 @@ export function Moment({done, onClose}: {done: Done | null; onClose: () => void}
   useEffect(() => {
     if (!done) return;
     setSharing("");
-    play("chime");
     const t = setTimeout(() => primary.current?.focus(), 400);
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);

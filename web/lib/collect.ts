@@ -4,7 +4,7 @@ import {useState} from "react";
 import {useAccount} from "wagmi";
 import {SERIES_ABI} from "./contracts";
 import type {SeriesView} from "./lens";
-import {money, n18, n8, qty, stockName} from "./format";
+import {money, n18, n8} from "./format";
 import {useTx} from "./tx";
 
 /**
@@ -28,22 +28,16 @@ export function useCollect(s?: SeriesView, floorBal = 0n, upsideBal = 0n) {
 
   async function collect() {
     if (!s || !address) return false;
-    const name = stockName(s.underlyingSymbol);
-    const receipt = {
-      title: `Collected ${name} split`,
-      body: `Paid ${qty(floorTokens + upsideTokens, 4)} ${s.underlyingSymbol} share tokens at the final price of ${money(px)}.`,
-      amount: "+" + money(total), icon: "stele" as const,
-    };
     if (floorBal > 0n) {
       setStep("floor");
       const h = await tx.run({address: s.series, abi: SERIES_ABI, functionName: "claimFloor", args: [floorBal, address]},
-                             upsideBal > 0n ? undefined : {toast: `You collected ${money(total)}`, body: `Paid in ${s.underlyingSymbol} share tokens.`, receipt});
+                             upsideBal > 0n ? undefined : {toast: `You collected ${money(total)}`, body: `Paid in ${s.underlyingSymbol} share tokens.`});
       if (!h) { setStep("idle"); return false; }
     }
     if (upsideBal > 0n) {
       setStep("upside");
       const h = await tx.run({address: s.series, abi: SERIES_ABI, functionName: "claimUpside", args: [upsideBal, address]},
-                             {toast: `You collected ${money(total)}`, body: `Paid in ${s.underlyingSymbol} share tokens.`, receipt});
+                             {toast: `You collected ${money(total)}`, body: `Paid in ${s.underlyingSymbol} share tokens.`});
       if (!h) { setStep("idle"); return false; }
     }
     setStep("idle");

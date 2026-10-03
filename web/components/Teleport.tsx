@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {useRouter} from "next/navigation";
 import type {ComponentProps, MouseEvent} from "react";
-import {play} from "@/lib/sound";
 
 /**
  * A link that teleports. The screen fills with pixels spreading out from where you clicked, with a
@@ -117,7 +116,6 @@ export function TeleportLink({href, onClick, ...rest}: ComponentProps<typeof Lin
     if (target === location.pathname) return; // already here: an ordinary link scrolls or does nothing
     e.preventDefault();
     if (busy) return;
-    play("rush");
     teleport(e.clientX || innerWidth / 2, e.clientY || innerHeight / 2, () => router.push(href), () => location.pathname === target);
   };
   return <Link href={href} onClick={click} {...rest} />;

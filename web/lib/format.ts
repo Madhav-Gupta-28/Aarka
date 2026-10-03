@@ -3,14 +3,6 @@ export const n8 = (v: bigint) => Number(v) / 1e8;
 export const n18 = (v: bigint) => Number(v) / 1e18;
 export const n6 = (v: bigint) => Number(v) / 1e6;
 
-export const usd = (v: bigint, dp = 2) => money(n8(v), dp);
-
-export const units = (v: bigint, dp = 2) =>
-  n18(v).toLocaleString("en-US", {maximumFractionDigits: dp});
-
-/** Payout ratios are 18-decimal fractions of one underlying token. */
-export const pct = (v: bigint) => `${(n18(v) * 100).toFixed(1)}%`;
-
 /** Dollars first, always: "$1,240.00". */
 export function money(v: number, dp = 2) {
   if (!Number.isFinite(v)) return "—";
@@ -33,12 +25,6 @@ export function delta(v: number, dp = 2) {
 }
 
 const NY = "America/New_York";
-
-export function expiryLabel(ts: bigint) {
-  return new Date(Number(ts) * 1000).toLocaleDateString("en-US", {
-    day: "2-digit", month: "short", year: "numeric", timeZone: NY,
-  });
-}
 
 /** "Oct 30" */
 export const endShort = (ts: bigint) =>

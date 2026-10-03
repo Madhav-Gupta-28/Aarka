@@ -2,7 +2,7 @@
 
 import {useCallback, useRef, useState} from "react";
 import {RELIC} from "@/lib/relics";
-import {delta, money, lineLabel} from "@/lib/format";
+import {money, lineLabel} from "@/lib/format";
 import {Relic} from "./Relic";
 
 /** Price range for the slider: roughly half the line to two thirds above it, in $10 steps. */
@@ -139,33 +139,6 @@ export function PresetChips({spot, price, setPrice, withSub = true}: {spot: numb
     </>
   );
 }
-
-/** The two big numbers under the slider: what each piece would be worth, and the change. */
-export function WorthPair({price, strike, floorToday, upsideToday, size = 48, compact}: {
-  price: number; strike: number; floorToday: number; upsideToday: number; size?: number; compact?: boolean;
-}) {
-  const {floor, upside} = payoff(price, strike);
-  const line = (d: number, base: number) => (Math.abs(d) < 0.005 ? "Same as today" : `${delta(d)} vs ${money(base)} today`);
-  const cell = (relic: string, title: string, v: number, d: number, base: number, dashed?: boolean) => (
-    <div style={{padding: compact ? 16 : 24, display: "flex", flexDirection: "column", gap: compact ? 8 : 10, background: "var(--surface)", border: dashed ? "1px dashed var(--accent)" : undefined}}>
-      <div className="row gap-10">
-        {!compact && <Relic src={relic} size={32} />}
-        <span className="mono" style={{fontSize: compact ? 12 : 13, letterSpacing: ".08em"}}>{title}</span>
-      </div>
-      <div className="num gold" style={{fontSize: size, lineHeight: 1}}>{money(v)}</div>
-      <div className={`mono ${d >= -0.005 ? "up" : "down"}`} style={{fontSize: compact ? 12 : 14, lineHeight: 1.3}}>
-        {compact ? (Math.abs(d) < 0.005 ? "= today" : `${delta(d)} vs today`) : line(d, base)}
-      </div>
-    </div>
-  );
-  return (
-    <div className="worth-pair" style={{display: "grid", gridTemplateColumns: "1fr 1fr", border: "1px solid var(--line)", gap: 1, background: "var(--line)"}}>
-      {cell(RELIC.coinFloor, compact ? "FLOOR" : "YOUR FLOOR", floor, floor - floorToday, floorToday)}
-      {cell(RELIC.coinUp, compact ? "UPSIDE" : "YOUR UPSIDE", upside, upside - upsideToday, upsideToday)}
-    </div>
-  );
-}
-
 export function ChartLegend() {
   return (
     <div className="row gap-20 mono" style={{fontSize: 12}}>

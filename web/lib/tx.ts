@@ -6,7 +6,7 @@ import {useQueryClient} from "@tanstack/react-query";
 import type {Abi} from "viem";
 import {publicClient} from "./client";
 import {robinhoodTestnet} from "./chain";
-import {addReceipt, useToast, type Receipt} from "./ui";
+import {useToast} from "./ui";
 
 export type TxPhase = "idle" | "wallet" | "mining" | "done" | "error";
 
@@ -58,10 +58,10 @@ export function explain(e: unknown): string {
 }
 
 /**
- * Send one transaction and see it through: wallet, then confirmation, then a receipt.
+ * Send one transaction and see it through: wallet, then confirmation, then a toast.
  *
  * Every write names the testnet chain id, so a wallet on another network cannot sign it. On
- * success every read is refreshed, the receipt goes into this wallet's history, and a toast says
+ * success every read is refreshed and a toast says
  * what changed.
  */
 export function useTx() {
@@ -73,7 +73,7 @@ export function useTx() {
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<`0x${string}` | null>(null);
 
-  const run = useCallback(async (call: Call, done?: {toast: string; body?: string; receipt?: Omit<Receipt, "at" | "hash">}) => {
+  const run = useCallback(async (call: Call, done?: {toast: string; body?: string}) => {
     setError(null);
     setPhase("wallet");
     try {
@@ -88,7 +88,6 @@ export function useTx() {
       setPhase("done");
       await qc.invalidateQueries();
       if (done) {
-        if (done.receipt && address) addReceipt(address, {...done.receipt, at: Date.now(), hash: h});
         toast({title: done.toast, body: done.body, tone: "up"});
       }
       return h;

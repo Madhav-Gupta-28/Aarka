@@ -5,14 +5,12 @@ import {usePathname} from "next/navigation";
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
 import {useAccount, useConnect, useDisconnect, useSwitchChain} from "wagmi";
 import {robinhoodTestnet} from "@/lib/chain";
-import {quoteFor, stocksOf, useParityAll, useSeries} from "@/lib/data";
-import {endCode, money, short, lineLabel} from "@/lib/format";
+import {short} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
-import {usePrefs, useReducedMotion} from "@/lib/ui";
+import {usePrefs} from "@/lib/ui";
 import {Keys} from "./Keys";
 import {TeleportLink} from "./Teleport";
 import {Mark} from "./Mark";
-import {Relic} from "./Relic";
 
 /** Two places, not eleven: the app, and how it works. Everything else lives inside one of them. */
 const NAV = [
@@ -68,7 +66,7 @@ function NavSlab() {
   );
 }
 
-export function ViewSwitch() {
+function ViewSwitch() {
   const {view, setView} = usePrefs();
   return (
     <>
@@ -161,73 +159,6 @@ export function SiteHeader({overlay}: {overlay?: boolean}) {
   );
 }
 
-/** The live price strip: every stock, then every open split's two halves, scrolling at 30px/s. */
-export function PriceStrip() {
-  const {data: rows} = useSeries();
-  const {data: parity} = useParityAll(rows);
-  const belt = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
-
-  const stocks = stocksOf(rows);
-  const open = (rows ?? []).filter((r) => r.status === 0);
-  const fresh = stocks.length > 0 && stocks.every((s) => s.fresh);
-
-  const items: React.ReactNode[] = [
-    ...stocks.map((s) => (
-      <span className="item" key={`s${s.symbol}`}>
-        <b>{s.symbol}</b><span className="px">{s.spot ? money(s.spot) : "—"}</span>
-        <span className={s.fresh ? "up" : "down"}>{s.fresh ? "● LIVE" : "● DELAYED"}</span>
-      </span>
-    )),
-    ...open.map((r) => {
-      const q = quoteFor(r, parity);
-      return (
-        <span className="item" key={r.series}>
-          <b>{r.underlyingSymbol} ${lineLabel(q.strike)} {endCode(r.expiry)}</b>
-          <span className="muted">FLOOR</span><span className="px">{money(q.floor)}</span>
-          <span className="muted">UPSIDE</span><span className="px">{money(q.upside)}</span>
-        </span>
-      );
-    }),
-  ];
-
-  useEffect(() => {
-    if (reduce || !items.length) return;
-    let x = 0, raf = 0, last = performance.now();
-    const step = (t: number) => {
-      const el = belt.current;
-      if (el) {
-        x -= (t - last) * 0.03;
-        const w = el.scrollWidth / 2;
-        if (w > 0 && -x >= w) x += w;
-        el.style.transform = `translateX(${x}px)`;
-      }
-      last = t;
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [reduce, items.length]);
-
-  return (
-    <div className={`strip${fresh ? "" : " delayed"}`}>
-      <div className="live">
-        <Relic name={fresh ? "sunSmall" : "sunDim"} size={32} />
-        <span className={`stamp-word ${fresh ? "gold" : ""}`} style={{font: "400 12px/1 var(--f-px), monospace"}}>{rows ? (fresh ? "LIVE" : "DELAYED") : "…"}</span>
-        <span className="label what">PRICES · THE SUN</span>
-      </div>
-      <div className="tape" aria-label="Live prices">
-        <div className="belt" ref={belt}>
-          {items}
-          {!reduce && items.map((it, i) => <span key={`dup${i}`} aria-hidden style={{display: "contents"}}>{it}</span>)}
-          {!rows && <span className="item muted">Reading the chain…</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Two destinations fit in the header on any width, so the mobile tab bar is gone. */
 /** On a phone the top menu doesn't fit, so the same three places sit at the bottom, in thumb reach. */
 const TAB_ICONS: Record<string, string> = {
   "/": "M2 7h1v6H2zM3 6h1v1H3zM4 5h1v1H4zM5 4h1v1H5zM6 3h2v1H6zM8 4h1v1H8zM9 5h1v1H9zM10 6h1v1h-1zM11 7h1v6h-1zM3 12h8v1H3zM6 9h2v3H6z",
@@ -235,7 +166,7 @@ const TAB_ICONS: Record<string, string> = {
   "/how": "M3 2h8v1H3zM2 3h1v9H2zM11 3h1v9h-1zM3 12h8v1H3zM4 5h6v1H4zM4 7h6v1H4zM4 9h4v1H4z",
 };
 
-export function TabBar() {
+function TabBar() {
   const path = usePathname();
   const cur = activeIndex(path);
   return (
@@ -250,7 +181,7 @@ export function TabBar() {
   );
 }
 
-export function FootCompact() {
+function FootCompact() {
   return (
     <footer className="foot">
       <Mark size={24} ground="var(--bg-strip)" />
@@ -273,13 +204,12 @@ export function FootFull() {
 }
 
 /** The frame every regular page shares. */
-export function Shell({children, strip = false, full, overlayHead}: {
-  children: React.ReactNode; strip?: boolean; full?: boolean; overlayHead?: boolean;
+export function Shell({children, full, overlayHead}: {
+  children: React.ReactNode; full?: boolean; overlayHead?: boolean;
 }) {
   return (
     <div className="page">
       <SiteHeader overlay={overlayHead} />
-      {strip && !overlayHead && <PriceStrip />}
       <main id="main">{children}</main>
       {full ? <FootFull /> : <FootCompact />}
     </div>

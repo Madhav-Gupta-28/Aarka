@@ -212,12 +212,3 @@ export const TOKEN_ABI = [
    inputs: [{name: "to", type: "address"}, {name: "amount", type: "uint256"}], outputs: []},
   {type: "error", name: "FaucetCooldown", inputs: [{name: "availableAt", type: "uint256"}]},
 ] as const;
-
-export enum Status { Open, Expired, Challenging, Claimable }
-
-export const STATUS_LABEL: Record<number, string> = {
-  0: "Open",
-  1: "Awaiting settlement",
-  2: "Settling",
-  3: "Claimable",
-};

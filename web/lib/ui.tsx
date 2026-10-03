@@ -79,54 +79,6 @@ export function ToastProvider({children}: {children: React.ReactNode}) {
 
 export const useToast = () => useContext(ToastCtx);
 
-// ── Receipts ───────────────────────────────────────────────────────────────────────────────────
-
-/**
- * What this wallet has done from this browser, newest first. The chain is the record; this is
- * only so the ledger can say "Split 2 NVIDIA shares" instead of listing raw transfers.
- */
-export type Receipt = {
-  at: number;
-  title: string;
-  body: string;
-  amount: string;
-  icon: "coinFloor" | "coinUp" | "coinFull" | "stele" | "tablet" | "cash";
-  hash: `0x${string}`;
-};
-
-const key = (addr: string) => `aarka.receipts.${addr.toLowerCase()}`;
-
-export function readReceipts(addr?: string): Receipt[] {
-  if (!addr) return [];
-  try {
-    const raw = localStorage.getItem(key(addr));
-    return raw ? (JSON.parse(raw) as Receipt[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function addReceipt(addr: string, r: Receipt) {
-  const all = [r, ...readReceipts(addr).filter((x) => x.hash !== r.hash)].slice(0, 60);
-  write(key(addr), JSON.stringify(all));
-  window.dispatchEvent(new Event("aarka:receipts"));
-}
-
-export function useReceipts(addr?: string) {
-  const [list, setList] = useState<Receipt[]>([]);
-  useEffect(() => {
-    const load = () => setList(readReceipts(addr));
-    load();
-    window.addEventListener("aarka:receipts", load);
-    window.addEventListener("storage", load);
-    return () => {
-      window.removeEventListener("aarka:receipts", load);
-      window.removeEventListener("storage", load);
-    };
-  }, [addr]);
-  return list;
-}
-
 // ── Motion helpers ─────────────────────────────────────────────────────────────────────────────
 
 export function useReducedMotion() {

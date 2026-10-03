@@ -82,7 +82,7 @@ export function PositionsList() {
   );
 }
 
-function Row({p, s, q, v}: {p: Position; s: SeriesView; q: ReturnType<typeof quoteFor>; v: ReturnType<typeof valuePosition>}) {
+function Row({p, s, v}: {p: Position; s: SeriesView; v: ReturnType<typeof valuePosition>}) {
   const name = stockName(s.underlyingSymbol);
   const f = n18(p.floorBalance), u = n18(p.upsideBalance);
   const st = statusOf(s);

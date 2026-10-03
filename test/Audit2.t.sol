@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test, console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 import {BaseTest} from "./Base.t.sol";
 import {DateLib} from "../src/libraries/DateLib.sol";
 import {AarkaLens} from "../src/AarkaLens.sol";
 import {AarkaSeries} from "../src/AarkaSeries.sol";
-import {ExpiryCalendar} from "../src/ExpiryCalendar.sol";
-import {AggregatorV3Interface} from "../src/interfaces/IExternal.sol";
 
 /// @notice Second-pass audit: libraries, view layer, and denial-of-service surface.
 contract Audit2Test is BaseTest {
