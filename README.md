@@ -12,7 +12,7 @@ rise for a fraction of a share. No borrowing, so nothing can ever be liquidated.
 ![tests](https://img.shields.io/badge/tests-213%20passing-2ea44f)
 ![coverage](https://img.shields.io/badge/coverage-99%25%20lines%2C%2091%25%20branches-2ea44f)
 ![verified](https://img.shields.io/badge/contracts-71%20verified-1D4ED8)
-![audits](https://img.shields.io/badge/reviews-4%20rounds%2C%2029%20findings%20fixed-8C6A3F)
+![audits](https://img.shields.io/badge/reviews-4%20rounds%2C%2029%20findings-8C6A3F)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 🌐 **[Live app](https://aarka-app.vercel.app)** · 🧭 **[How it works](https://aarka-app.vercel.app/how)** · 🛡 **[Audit](AUDIT.md)** · 📄 **[Architecture](ARCHITECTURE.md)**
@@ -28,7 +28,7 @@ rise for a fraction of a share. No borrowing, so nothing can ever be liquidated.
 A tokenized stock is a share you can only hold or sell. The two things stock holders actually do
 with options, **sell the growth they don't expect** (a covered call) or **buy the growth they do
 expect** (a call), need an option writer on the other side, margin, and on-chain, a weekly auction
-into a handful of market makers. That machinery is why on-chain option vaults mostly died.
+into a handful of market makers. Aarka needs none of it.
 
 ## What Aarka is
 
@@ -177,7 +177,7 @@ Every address is in [`TESTING.md`](TESTING.md), and all 71 contracts are verifie
 
 ## Security
 
-- **Four review rounds, 29 findings, all fixed**, each with a test that reproduces the attack. [`AUDIT.md`](AUDIT.md) has every one, including one live bug found by using the app.
+- **Four review rounds, 29 findings:** every one fixed except an informational note that is documented, each fix with a test that reproduces the attack. [`AUDIT.md`](AUDIT.md) has them all, including one live bug found by using the app, and the review leads left open with the reason.
 - **Invariants:** payouts sum to one share; the vault always covers every claim; no value is created; terms never change. Checked over 2.25 million random calls.
 - **No admin over funds:** nobody can move a token out of a series, change its terms, pause redemption or set a price.
 - **Fails safe:** an oracle outage delays settlement, never strands it; a failed arb never reverts the trader's swap.

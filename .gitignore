@@ -1,7 +1,7 @@
 # Foundry
 cache/
 out/
-broadcast/*/dry-run/
+broadcast/
 docs/
 
 # Env & secrets

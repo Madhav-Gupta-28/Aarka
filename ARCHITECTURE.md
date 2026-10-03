@@ -827,6 +827,8 @@ Checked against `Uniswap/v4-core` tag `v4.0.0`, file `src/libraries/Hooks.sol`:
 uint160 internal constant AFTER_SWAP_FLAG = 1 << 6;    // 0x40
 ```
 
+> **As deployed (29 Sep 2026):** the hook also takes `AFTER_ADD_LIQUIDITY_FLAG` and `BEFORE_REMOVE_LIQUIDITY_FLAG`, so its permission bits are `0x640`. They enforce a one-hour minimum liquidity age so the arbitrage donation cannot be sniped just in time (AUDIT-27). See [`AUDIT.md`](AUDIT.md).
+
 Hook permissions are encoded in the **low 14 bits of the hook's own address**, so the hook must be deployed to a mined `CREATE2` address whose last bits match its declared permissions. Use `HookMiner` from `v4-periphery`. Budget half a day for this the first time; it is the single most common thing that derails a first v4 hook.
 
 From `src/interfaces/IPoolManager.sol`, the four primitives the hook needs, verbatim:
