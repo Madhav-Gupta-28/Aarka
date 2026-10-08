@@ -17,6 +17,13 @@ rise for a fraction of a share. No borrowing, so nothing can ever be liquidated.
 
 🌐 **[Live app](https://aarka-app.vercel.app)** · 🧭 **[How it works](https://aarka-app.vercel.app/how)** · 🛡 **[Audit](AUDIT.md)** · 📄 **[Architecture](ARCHITECTURE.md)**
 
+> **Buildathon judging.** The Arbitrum Open House Singapore submission is commit
+> [`015c423`](https://github.com/Madhav-Gupta-28/Aarka/tree/buildathon-submission) (tag
+> `buildathon-submission`, 4 Oct 2026), and the live app still runs exactly the contracts that
+> submission lists. Everything from 8 Oct onward (the mainnet fork suite, AUDIT-30 to AUDIT-32 and
+> their fixes, a set of post-buildathon testnet markets) came after the submission, is not used by
+> the app, and is not part of what was submitted.
+
 **[11 series settled](#proven-on-testnet)** against Chainlink closes · **4** parity restorations, **$3,655** paid to LPs · **0** liquidations possible
 
 </div>

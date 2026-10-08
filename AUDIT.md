@@ -743,6 +743,9 @@ and settle a testnet series with it. On mainnet the feeds are Chainlink's.
 
 ## Fifth review, 8 October: on a fork of Robinhood Chain mainnet
 
+*After the Arbitrum Open House Singapore submission (commit `015c423`, 4 Oct). Nothing here changes
+the contracts the submission lists or the app judges use.*
+
 Every earlier review ran against stand-ins: mock tokens and feeds, or the testnet, which has neither
 the real stock tokens nor Chainlink. This one runs the protocol against the real thing.
 [`test/fork/mainnet`](test/fork/mainnet) deploys Aarka onto a fork of mainnet and drives it with the
@@ -832,25 +835,20 @@ can cause.
 - Chainlink still publishes no sequencer uptime feed for Robinhood Chain, so `AarkaSequencerFeed`
   and its keeper are required on mainnet; its every reporting state is covered.
 
-### Redeployed, 8 October
+### Deployed, 8 October, and not used by the site
 
 Rehearsed first: an anvil fork of the testnet ran the exact `open-markets.py --keep` command with the
 real deployer key, and on the fork a $50k floor buy drew a 215-NVDA arb ($1,252 to LPs, gap 1 bp), a
 $1m buy a 2,584-NVDA arb ($384,415, gap 22 bps), a 100-floor sale the redeem arb, and a
-keep-the-floor sale paid out. Then, on the testnet itself:
+keep-the-floor sale paid out. Then, on the testnet itself, a HookLens with AUDIT-31
+(`0x8eC38Fafb7fD2A53864c552E4EcC3bc63990aAD3`) and second markets with AUDIT-30 for the seven open
+series, each opened where its old market traded, at 0 bps, and verified on the explorer
+(addresses in [`TESTING.md`](TESTING.md)).
 
-- **HookLens** with AUDIT-31: `0x8eC38Fafb7fD2A53864c552E4EcC3bc63990aAD3`.
-- **The seven open markets** with AUDIT-30, each opened where its old market traded, at 0 bps, at
-  the addresses the rehearsal mined. Their bytecode carries the new `restoreParity(key, halvings)`.
-  A real $5 floor buy went through the router on the flagship afterwards.
-- **The stock pools**, which nobody on testnet arbitrages against the mirrored feed, had drifted
-  3.3% from it on NVDA. `script/Realign.s.sol` moved both to the feed price and nudged each market;
-  the four NVDA hooks restored parity live against the move. The TSLA markets sit at 96 bps, inside
-  the band where three pools' fees make an arb unprofitable, which is the hook doing its job.
-- All seven hooks and the HookLens verify on the explorer; the site serves the new addresses, and
-  keeps reading the replaced hooks for the parity history.
-
-The eight ended series keep their earlier hooks; their markets are no longer traded.
+The site does not use them. It keeps the contracts the buildathon submission lists until judging
+ends. A realignment of the two shared stock pools to the mirrored feed price was undone the same
+day, back to $229.55 and $376.12, by trades in the hookless pools that reach no hook, so every
+submitted market reads exactly as it did before: gaps of 1, 58, 0, 0, 58, 58 and 0 bps.
 
 ```
 213 unit, fuzz and invariant tests, all passing

@@ -74,6 +74,20 @@ contract Realign is Script {
         console.log("stock pool moved to", target, "USDG units per share");
     }
 
+    /// @notice Moves a stock's hookless stock/USDG pool to `price` (6-decimal USDG per share) and
+    ///         nothing else. A trade in a hookless pool reaches no hook, so no market is touched.
+    function moveTo(address stock, uint256 price) external {
+        vm.startBroadcast();
+        IStockMint(stock).mint(msg.sender, 100_000e18);
+        IStockMint(USDG).mint(msg.sender, 100_000_000e6);
+        IERC20(stock).approve(address(SWAPPER), type(uint256).max);
+        IERC20(USDG).approve(address(SWAPPER), type(uint256).max);
+        PoolKey memory under = _key(stock, IHooks(address(0)));
+        _swapTo(under, _sqrtPrice(under, stock, price));
+        vm.stopBroadcast();
+        console.log("stock pool moved to", price, "USDG units per share");
+    }
+
     function _swapTo(PoolKey memory key, uint160 target) private {
         (uint160 current,,,) = MANAGER.getSlot0(key.toId());
         bool zeroForOne = target < current;
