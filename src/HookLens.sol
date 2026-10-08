@@ -61,9 +61,13 @@ contract HookLens {
         address fl = address(s.floorToken());
         address up = address(s.upsideToken());
 
-        PoolKey memory kUnder = _key(under, p.quote, IHooks(address(0)));
-        PoolKey memory kFloor = _key(fl, p.quote, IHooks(address(hook)));
-        PoolKey memory kUpside = _key(up, p.quote, IHooks(address(hook)));
+        // The keys the hook was wired with, never rebuilt. The underlying pool can be any fee tier
+        // the owner chose; assuming the 0.30% one showed a hook wired to NVDA's deeper 0.01% pool
+        // against prices it never trades (AUDIT-31). `wire` refuses an uninitialised pool, so every
+        // price read below is of a live one.
+        PoolKey memory kUnder = _wiredKey(hook, 0);
+        PoolKey memory kFloor = _wiredKey(hook, 1);
+        PoolKey memory kUpside = _wiredKey(hook, 2);
 
         p.underlyingLiquidity = poolManager.getLiquidity(kUnder.toId());
         p.floorLiquidity = poolManager.getLiquidity(kFloor.toId());
@@ -72,7 +76,6 @@ contract HookLens {
         uint256 pn = _priceX96(kUnder, under);
         uint256 pf = _priceX96(kFloor, fl);
         uint256 pu = _priceX96(kUpside, up);
-        if (pn == 0) return p;
 
         uint256 sum = pf + pu;
         p.halvesDear = sum > pn;
@@ -91,7 +94,6 @@ contract HookLens {
     ///      deep out-of-the-money upside token trades in exactly that range.
     function _priceX96(PoolKey memory key, address asset) private view returns (uint256) {
         (uint160 sqrtP,,,) = poolManager.getSlot0(key.toId());
-        if (sqrtP == 0) return 0;
         if (Currency.unwrap(key.currency0) == asset) {
             return FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), Q96);
         }
@@ -99,14 +101,10 @@ contract HookLens {
         return FullMath.mulDiv(half, Q96, uint256(sqrtP));
     }
 
-    function _key(address a, address b, IHooks h) private pure returns (PoolKey memory) {
-        (address c0, address c1) = a < b ? (a, b) : (b, a);
-        return PoolKey({
-            currency0: Currency.wrap(c0),
-            currency1: Currency.wrap(c1),
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: h
-        });
+    /// @dev One of the hook's stored pool keys: 0 underlying, 1 floor, 2 upside.
+    function _wiredKey(AarkaParityHook hook, uint256 which) private view returns (PoolKey memory k) {
+        (Currency c0, Currency c1, uint24 fee, int24 spacing, IHooks hooks_) =
+            which == 0 ? hook.underlyingKey() : which == 1 ? hook.floorKey() : hook.upsideKey();
+        k = PoolKey({currency0: c0, currency1: c1, fee: fee, tickSpacing: spacing, hooks: hooks_});
     }
 }
