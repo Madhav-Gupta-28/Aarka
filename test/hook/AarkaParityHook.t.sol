@@ -50,7 +50,7 @@ contract AarkaParityHookTest is HookBaseTest {
 
     function test_restoreParityIsNotCallableExternally() public {
         vm.expectRevert(AarkaParityHook.NotSelf.selector);
-        hook.restoreParity(floorKey);
+        hook.restoreParity(floorKey, 0);
     }
 
     function test_afterSwapIsOnlyCallableByThePoolManager() public {

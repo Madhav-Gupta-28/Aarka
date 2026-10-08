@@ -18,6 +18,7 @@ import {SqrtPriceMath} from "v4-core/src/libraries/SqrtPriceMath.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {AarkaSeries} from "../AarkaSeries.sol";
@@ -95,6 +96,16 @@ contract AarkaParityHook is IHooks, Ownable {
     ///      finer than the fee tier. Each step is pure arithmetic on state read once up front, so
     ///      the whole solve costs no additional storage reads.
     uint256 private constant SOLVER_STEPS = 20;
+
+    /// @notice How many sizes the hook tries before giving up: the solved size, then half, a
+    ///         quarter and an eighth of it.
+    /// @dev The solver treats the underlying pool's in-range liquidity as if it ran across the
+    ///      whole curve. A live pool is concentrated, so at large sizes the real price impact is
+    ///      far steeper than solved and the arb at the solved size loses money. On a fork of
+    ///      Robinhood Chain mainnet a $1m trade drew a solved size the live NVDA/USDG pool could not
+    ///      fill profitably, while a quarter of it paid the LPs over $150k (AUDIT-30). Each retry
+    ///      costs one more self-call, so the worst case is bounded at four.
+    uint256 private constant MAX_ATTEMPTS = 4;
 
     /// @dev A pool's state, read once, so the search runs entirely in memory.
     struct Leg {
@@ -233,8 +244,15 @@ contract AarkaParityHook is IHooks, Ownable {
 
         _setReentrant(true);
         // Self-call so a failed or unprofitable arb reverts in its own frame. Transient storage
-        // and every currency delta unwind with it, leaving the user's swap untouched.
-        try this.restoreParity(key) {} catch {}
+        // and every currency delta unwind with it, leaving the user's swap untouched. A refusal
+        // that a smaller size cannot change ends the attempts at once.
+        for (uint256 halvings; halvings < MAX_ATTEMPTS; ++halvings) {
+            try this.restoreParity(key, halvings) {
+                break;
+            } catch (bytes memory reason) {
+                if (_final(reason)) break;
+            }
+        }
         _setReentrant(false);
 
         return (IHooks.afterSwap.selector, 0);
@@ -245,7 +263,8 @@ contract AarkaParityHook is IHooks, Ownable {
     // --------------------------------------------------------------------
 
     /// @notice External only so `afterSwap` can wrap it in try/catch. Callable by nobody else.
-    function restoreParity(PoolKey calldata triggerKey) external {
+    /// @param halvings how many times to halve the solved size before trading it
+    function restoreParity(PoolKey calldata triggerKey, uint256 halvings) external {
         if (msg.sender != address(this)) revert NotSelf();
 
         // The pool that triggered this must be one of ours. Anyone can create a v4 pool naming
@@ -264,9 +283,9 @@ contract AarkaParityHook is IHooks, Ownable {
         uint256 gap = halvesOverpriced ? sum - pUnder : pUnder - sum;
         if (FullMath.mulDiv(gap, BPS, pUnder) < minDeviationBps) revert BelowThreshold();
 
-        uint256 size = _solveSize(halvesOverpriced);
+        uint256 size = _solveSize(halvesOverpriced) >> halvings;
         if (size == 0) revert NoProfitableSize();
-        if (halvesOverpriced) _mintArb(size);
+        if (halvesOverpriced) size = _mintArb(size);
         else _redeemArb(size);
 
         uint256 profit = _profit();
@@ -285,24 +304,40 @@ contract AarkaParityHook is IHooks, Ownable {
         emit ParityRestored(halvesOverpriced, size, profit);
     }
 
+    /// @dev True for a refusal that holds at every size: the pool is not ours, the gap is under
+    ///      the threshold, or there is nothing to trade.
+    function _final(bytes memory reason) private pure returns (bool) {
+        bytes4 sel = bytes4(reason);
+        return sel == UnknownPool.selector || sel == BelowThreshold.selector || sel == NoProfitableSize.selector;
+    }
+
     function _requireFlat(Currency c) private view {
         if (poolManager.currencyDelta(address(this), c) != 0) revert UnexpectedDelta();
     }
 
     /// @dev Halves are dear: buy the underlying, split it, sell both halves.
-    function _mintArb(uint256 size) private {
+    ///
+    ///      The size is solved as though the underlying pool's in-range liquidity ran across the
+    ///      whole curve. A live pool is concentrated, so a large arb can ask for more stock than the
+    ///      pool will sell. `take` would still draw the full size from the PoolManager, which holds
+    ///      stock for every pool, and the hook would end owing what it never bought, cannot pay, and
+    ///      unwinds — going quiet at exactly the size where the gap is widest. Measured on a fork of
+    ///      Robinhood Chain mainnet: a $1m trade on the live NVDA/USDG pool drew no correction at
+    ///      all (AUDIT-30). So the arb proceeds with what the swap actually delivered, and the
+    ///      halves it sells are the halves that stock made.
+    /// @return filled the underlying actually bought, split and sold as halves
+    function _mintArb(uint256 size) private returns (uint256 filled) {
         _swapExactOut(underlyingKey, underlyingCurrency, size);
-        poolManager.take(underlyingCurrency, address(this), size);
+        filled = SafeCast.toUint256(poolManager.currencyDelta(address(this), underlyingCurrency));
+        poolManager.take(underlyingCurrency, address(this), filled);
 
-        IERC20(Currency.unwrap(underlyingCurrency)).forceApprove(address(series), size);
-        series.mint(size, address(this));
+        IERC20(Currency.unwrap(underlyingCurrency)).forceApprove(address(series), filled);
+        series.mint(filled, address(this));
 
-        _swapExactIn(floorKey, floorCurrency, size);
+        _swapExactIn(floorKey, floorCurrency, filled);
         _settleDebt(floorCurrency);
-        _swapExactIn(upsideKey, upsideCurrency, size);
+        _swapExactIn(upsideKey, upsideCurrency, filled);
         _settleDebt(upsideCurrency);
-
-        _settleDebtIfAny(underlyingCurrency);
     }
 
     /// @dev Halves are cheap: buy both, recombine them, sell the underlying.
@@ -480,10 +515,6 @@ contract AarkaParityHook is IHooks, Ownable {
         poolManager.sync(c);
         IERC20(Currency.unwrap(c)).safeTransfer(address(poolManager), owed);
         poolManager.settle();
-    }
-
-    function _settleDebtIfAny(Currency c) private {
-        if (poolManager.currencyDelta(address(this), c) < 0) _settleDebt(c);
     }
 
     function _priceX96(PoolKey memory key, Currency asset) private view returns (uint256) {
