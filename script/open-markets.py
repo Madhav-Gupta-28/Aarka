@@ -22,7 +22,7 @@ import json, math, os, re, subprocess, sys, time
 RPC = os.environ.get("RPC", "https://rpc.testnet.chain.robinhood.com")
 USDG = "0xcF787ba06F58Af9c2B078Ec85B1a4E9AfA5f1097"
 SWAP_ROUTER = "0x83b5D54866A826426f4E413b668B587c052Ab824"
-HOOK_LENS = "0x414326E556667b5AE9931F67cDb267D1BAF7D1D0"
+HOOK_LENS = "0x8eC38Fafb7fD2A53864c552E4EcC3bc63990aAD3"
 PARITY = "parity(address)((address,address,address,uint256,uint256,uint256,uint256,uint256,bool,uint128,uint128,uint128,uint256,uint256,bool))"
 
 def load_env():

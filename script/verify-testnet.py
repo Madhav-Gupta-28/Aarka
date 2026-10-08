@@ -75,7 +75,7 @@ def targets(deployer):
         ("0xaE4f737b0f259b1C8A15a73367670090c94bB2d7", "src/AarkaLens.sol:AarkaLens", "constructor(address)", [FACTORY]),
         ("0xb47D3Bf8012fF8dfC56ABfc7142d55735E3508a0", "src/periphery/AarkaRouter.sol:AarkaRouter", "constructor(address,address)", [POOL_MANAGER, FACTORY]),
         ("0x4535B4dE5727bFADC6bD5E42242Ae2D25602341A", "src/adapters/AarkaSequencerFeed.sol:AarkaSequencerFeed", "constructor(address,address)", [deployer, "0xc0fF5A4B8fc5636C3dccaF52d613dc585d5125D5"]),
-        ("0x414326E556667b5AE9931F67cDb267D1BAF7D1D0", "src/HookLens.sol:HookLens", "constructor(address)", [POOL_MANAGER]),
+        ("0x8eC38Fafb7fD2A53864c552E4EcC3bc63990aAD3", "src/HookLens.sol:HookLens", "constructor(address)", [POOL_MANAGER]),
         (CALENDAR, "src/ExpiryCalendar.sol:ExpiryCalendar", "constructor(address)", [deployer]),
         ("0x44b27AB4eFD46719C2ddAFD616e88faFD22D8bC1", "src/testnet/TestStockToken.sol:TestStockToken", "constructor(string,string,address)", ["NVIDIA - Aarka Testnet", "NVDA", deployer]),
         ("0x06002571803D40bD20C13Bd835BE30a642623dEA", "src/testnet/TestStockToken.sol:TestStockToken", "constructor(string,string,address)", ["Tesla - Aarka Testnet", "TSLA", deployer]),
