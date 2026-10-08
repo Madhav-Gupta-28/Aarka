@@ -738,3 +738,107 @@ and settle a testnet series with it. On mainnet the feeds are Chainlink's.
 213 unit, fuzz and invariant tests, all passing
 7 fork tests against Robinhood Chain mainnet, 3 against X Layer, 2 against the testnet, all passing
 ```
+
+---
+
+## Fifth review, 8 October: on a fork of Robinhood Chain mainnet
+
+Every earlier review ran against stand-ins: mock tokens and feeds, or the testnet, which has neither
+the real stock tokens nor Chainlink. This one runs the protocol against the real thing.
+[`test/fork/mainnet`](test/fork/mainnet) deploys Aarka onto a fork of mainnet and drives it with the
+live NVDA, TSLA and USDG tokens, Chainlink's RHNVDA/USD, RHTSLA/USD and USDG/USD feeds, the Uniswap
+v4 PoolManager and the existing hookless NVDA/USDG and TSLA/USDG pools (about $9.9m and $14.8m at
+0.30%).
+
+Two moments of real history are used. On 28 September (block 74,851,966) series are created through
+the factory, split, sold through the router and traded in hooked pools. The fork then rolls to
+8 October (block 83,310,301) carrying Aarka's state forward while the feeds come back with the
+rounds Chainlink actually published, and the series settle against the 2 October close: NVDA
+$234.99711907 (aggregator round 1162), TSLA $370.448 (round 1446). The stock issuer's role holders
+were found by simulating each privileged call from every account the token's access registry ever
+granted a role, so pauses, corporate actions, burns and blocks are the issuer's real calls.
+
+92 tests. From that suite alone: 100% of lines and functions in every contract deployed to Robinhood
+Chain, and every branch but one, the `_settleDebt` sign check, which only ever runs straight after an
+exact-input swap through a pool with liquidity, and such a swap always leaves a debt.
+
+### AUDIT-30 · Low · The hook went quiet on trades larger than the live pool's real depth
+
+Measured by trade size against the live 0.30% NVDA/USDG pool, the hook corrected $50k to $500k floor
+buys and did nothing at all at $1m: the halves were left 12,094 bps off parity. Two causes, found in
+turn.
+
+- **The stock leg filled only partly.** The solver sizes the arb from the underlying pool's in-range
+  liquidity as though it ran across the whole curve. The live pool is concentrated, so the
+  exact-output purchase of the stock stopped short; `take` drew the full size from the PoolManager
+  anyway, which holds real NVDA for every pool; the hook ended owing about 911 NVDA it had never
+  bought, could not pay, and the arb unwound. The same shape as AUDIT-24: the hook silent at exactly
+  the size where the gap is widest. Nothing was lost and the trade stood.
+- **The solved size was unprofitable.** With that fixed, the real price impact across the pool's
+  thin upper ticks was still far steeper than solved, and the arb at the solved size lost money, so
+  the profit check refused it. Capping the size showed what was available: 1,000 NVDA earned the
+  LPs $195k on the same trade.
+
+**Fix.** The mint arb takes, splits and sells what the stock purchase actually delivered rather than
+what was asked for. And `afterSwap` retries a failed arb at half, a quarter and an eighth of the
+solved size, stopping at once on a refusal no smaller size can change (unknown pool, under the
+threshold, nothing to trade), so the worst case is four self-calls. The $1m trade now splits 1,140
+NVDA, pays the LPs $210,261 and leaves the gap at 3,558 bps.
+`test_AUDIT30_aMillionDollarTradeStillDrawsACorrection` and
+`test_AUDIT30_aStockLegThatFillsOnlyPartlyStillCorrects` failed before the fix.
+
+### AUDIT-31 · Low · HookLens read the 0.30% pool whatever pool the hook was wired to
+
+HookLens rebuilt the underlying pool's key as the hookless 0.30% tier. On mainnet NVDA's deepest
+pool is the 0.01% tier, about $25m against $9.9m, and a hook wired there was shown in the app with
+the other pool's price and liquidity. **Fix.** HookLens reads the three keys the hook stores at
+wiring. `test_AUDIT31_hookLensReadsThePoolTheHookIsWiredTo`.
+
+### AUDIT-32 · Informational · The stock token's issuer can burn, block or freeze a vault's stock
+
+Every Robinhood stock token sits behind one upgradeable beacon whose access registry grants, to
+separate accounts on mainnet today: `adminBurn` from any address, `blockAccounts`, a token-wide
+`pause`, `pauseOracle`, `updateMultiplier` and the upgrade itself. Tested with the real holders:
+
+- `adminBurn` on a vault left 20 pairs backed by 15 shares; the first holder out was paid in full
+  and the second could recover only what was left.
+- `blockAccounts` on a vault stopped every deposit and exit; the token refuses even an approval
+  naming a blocked address.
+- `pause` stopped every exit; settlement, which moves no tokens, still ran.
+- A blocked holder could still direct a redemption to another address.
+
+These are the issuer's compliance powers over a regulated security, and Aarka cannot remove them.
+They are now stated in the README. A pro-rata payout would spread a burn evenly instead of onto
+whoever exits last; left open, because it changes the redemption model for a loss only the issuer
+can cause.
+
+### Checked and sound, on the real chain
+
+- The live pools price the stock within 1% of Chainlink at both blocks.
+- The real 2 October rounds settle every series; a round after the close, a round older than 26
+  hours, a round that is not the last, and a round that does not exist are each refused for the
+  right reason. The live proxy answers a missing round with zeros rather than reverting, which the
+  successor check handles.
+- The issuer's real oracle pause holds both creation and settlement; a corporate action scheduled
+  through the real `updateMultiplier` blocks only series it falls inside, and NVDA's applied
+  10 September dividend blocks nothing. A week after expiry the late path settles regardless.
+- A Chainlink aggregator migration replayed on the live NVDA proxy lets a stale phase-1 round
+  through `settle`, and `challengeSettlement` replaces it inside the hour.
+- The hook restores parity in both directions on NVDA (stock after USDG) and TSLA (stock before),
+  refuses a stranger's pool, never takes a losing trade, and on a thin real pool buys only what is
+  there. AUDIT-28's partial fill is safe on mainnet. A hostile pool that tries to charge the router
+  more than the swap produced is refused.
+- A series on USDG, which implements none of the ERC-8056 signals, is created and settled normally.
+- Chainlink still publishes no sequencer uptime feed for Robinhood Chain, so `AarkaSequencerFeed`
+  and its keeper are required on mainnet; its every reporting state is covered.
+
+### Not yet redeployed
+
+The testnet hooks and HookLens run the code from before AUDIT-30 and AUDIT-31. Every testnet market
+is wired to a 0.30% underlying pool, so AUDIT-31 changes nothing there; AUDIT-30 needs new hooks,
+and therefore new markets, to reach the testnet.
+
+```
+213 unit, fuzz and invariant tests, all passing
+92 tests on a fork of Robinhood Chain mainnet, all passing
+```

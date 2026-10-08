@@ -665,7 +665,7 @@ try feed.getRoundData(roundId + 1) returns (uint80, int256, uint256, uint256 nex
 }
 ```
 
-The `try/catch` is required, not defensive padding. A Chainlink proxy `roundId` is the composite `(phaseId << 64) | aggregatorRoundId`. At a phase boundary — which happens when Chainlink migrates the underlying aggregator — `roundId + 1` is a well-formed identifier that does not exist, and `getRoundData` reverts rather than returning zeros. Without the catch, every series whose expiry lands near an aggregator migration would be permanently unsettleable.
+The `try/catch` is required, not defensive padding. A Chainlink proxy `roundId` is the composite `(phaseId << 64) | aggregatorRoundId`. At a phase boundary — which happens when Chainlink migrates the underlying aggregator — `roundId + 1` is a well-formed identifier that does not exist. What `getRoundData` then does depends on the aggregator: older ones revert, and Robinhood Chain's live proxies answer with zeros, which the `nextAt != 0` check treats as no successor. Without the catch, every series whose expiry lands near a migration to an aggregator of the first kind would be permanently unsettleable. Either way, a later round published in the *new* phase before expiry is invisible to this check, which is the hole `challengeSettlement` closes; it is replayed on the live NVDA proxy in `test/fork/mainnet`.
 
 ### 8.2 The challenge window
 
@@ -901,8 +901,13 @@ Three implementation choices worth stating:
   pool holds, which would revert inside the library instead of returning a price.
 
 Liquidity is treated as constant across the trade. That is exact for a full-range position and
-close for a trade inside one tick range; a trade crossing initialised ticks is sized slightly high,
-and the profitability check catches it.
+close for a trade inside one tick range. A live pool is concentrated, though, and a large trade
+crosses many ticks: on a fork of mainnet, a $1m trade against the real NVDA/USDG pool drew a solved
+size the pool could not fill profitably, and the hook did nothing (AUDIT-30). Two things follow from
+that. The mint arb splits and sells what the stock purchase actually delivered, not the size it
+asked for. And a failed arb is retried at half, a quarter and an eighth of the solved size, stopping
+at once on a refusal no smaller size can change; at most four self-calls, and the profitability
+check still decides each one.
 
 ### 11.6.1 Measured
 

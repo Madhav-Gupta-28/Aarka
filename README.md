@@ -9,10 +9,10 @@ gets everything above it. Keep one and sell the other: earn cash on shares you h
 rise for a fraction of a share. No borrowing, so nothing can ever be liquidated. Built on
 **Robinhood Chain**, priced by **Chainlink**, traded on **Uniswap v4**.
 
-![tests](https://img.shields.io/badge/tests-213%20passing-2ea44f)
-![coverage](https://img.shields.io/badge/coverage-99%25%20lines%2C%2091%25%20branches-2ea44f)
+![tests](https://img.shields.io/badge/tests-213%20unit%20%2B%2092%20mainnet%20fork-2ea44f)
+![coverage](https://img.shields.io/badge/mainnet%20fork%20coverage-100%25%20lines%2C%2099%25%20branches-2ea44f)
 ![verified](https://img.shields.io/badge/contracts-71%20verified-1D4ED8)
-![audits](https://img.shields.io/badge/reviews-4%20rounds%2C%2029%20findings-8C6A3F)
+![audits](https://img.shields.io/badge/reviews-5%20rounds%2C%2032%20findings-8C6A3F)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 🌐 **[Live app](https://aarka-app.vercel.app)** · 🧭 **[How it works](https://aarka-app.vercel.app/how)** · 🛡 **[Audit](AUDIT.md)** · 📄 **[Architecture](ARCHITECTURE.md)**
@@ -177,28 +177,67 @@ Every address is in [`TESTING.md`](TESTING.md), and all 71 contracts are verifie
 
 ## Security
 
-- **Four review rounds, 29 findings:** every one fixed except an informational note that is documented, each fix with a test that reproduces the attack. [`AUDIT.md`](AUDIT.md) has them all, including one live bug found by using the app, and the review leads left open with the reason.
+- **Five review rounds, 32 findings:** every one fixed except two documented ones, an informational note and the issuer's powers below, each fix with a test that reproduces the attack. [`AUDIT.md`](AUDIT.md) has them all, including one live bug found by using the app, one found only on a fork of real mainnet, and the review leads left open with the reason.
 - **Invariants:** payouts sum to one share; the vault always covers every claim; no value is created; terms never change. Checked over 2.25 million random calls.
 - **No admin over funds:** nobody can move a token out of a series, change its terms, pause redemption or set a price.
 - **Fails safe:** an oracle outage delays settlement, never strands it; a failed arb never reverts the trader's swap.
 
+### What Aarka cannot protect you from: the stock token's issuer
+
+Aarka holds the real stock token, and the token is a regulated security whose issuer keeps
+compliance powers over it. Every Robinhood stock token sits behind one upgradeable contract whose
+role holders can, on mainnet today:
+
+| Power | What it does to a series | Tested against the real role holder |
+| --- | --- | --- |
+| `adminBurn` | burns stock out of the vault itself; pairs are then backed by less than a share, and whoever exits last cannot | yes |
+| `blockAccounts` | blocks the vault: no deposit, no redemption, no claim | yes |
+| `pause` | stops every transfer: settlement still runs, every exit waits | yes |
+| `pauseOracle`, `updateMultiplier` | a pause or corporate action; Aarka waits for it, and settles late after a week if it must | yes |
+| upgrade | replaces the token's code | not exercised |
+
+A blocked holder can still name another address for any exit. Aarka cannot remove these powers; it
+can only say plainly that holding a half means trusting the issuer exactly as holding the stock does.
+
 ## Testing
 
 ```bash
-forge test --no-match-path "test/{Fork,XLayerFork}.t.sol"            # 213 unit, fuzz and invariant tests
-forge test --match-path test/Fork.t.sol --fork-url robinhood         # 7 against Robinhood Chain mainnet
-forge coverage --no-match-coverage "test|script|src/testnet"
+forge test --no-match-path "test/{Fork.t.sol,XLayerFork.t.sol,fork/**}"   # 213 unit, fuzz and invariant tests
+forge test --match-path "test/fork/mainnet/*" -j 2                         # 92 on a fork of Robinhood Chain mainnet
+forge test --match-path test/Fork.t.sol --fork-url robinhood              # 7 against mainnet's latest block
 ```
+
+**On real mainnet.** [`test/fork/mainnet`](test/fork/mainnet) runs the whole protocol against the
+live NVDA, TSLA and USDG tokens, Chainlink's feeds, the Uniswap v4 PoolManager and the existing
+NVDA/USDG and TSLA/USDG pools. Series are created through the factory on 28 September 2026, traded
+through the router and hooked pools, then settled on 8 October against the rounds Chainlink actually
+published for the 2 October close (NVDA $234.997, TSLA $370.448), and every holder collects. The
+issuer's real role holders pause the oracle, schedule a corporate action, burn and block, and a
+Chainlink aggregator migration is replayed on the live NVDA proxy. It needs archive state, which the
+public RPC does not keep; `robinhood_archive` in `foundry.toml` points at a public archive endpoint.
+
+Coverage from that suite alone, on every contract deployed to Robinhood Chain:
 
 | Contract | Lines | Branches |
 | --- | --- | --- |
-| `AarkaSeries`, `AarkaFactory`, `AarkaToken`, `ExpiryCalendar`, `DateLib`, `AarkaSequencerFeed` | 100% | 100% |
-| `AarkaParityHook` | 100% | 84% |
-| `AarkaRouter` | 100% | 86% |
-| `AarkaLens` · `HookLens` · `StreamsAggregator` | 96% · 100% · 100% | 86% · 50% · 91% |
+| `AarkaSeries`, `AarkaFactory`, `AarkaToken`, `ExpiryCalendar`, `DateLib`, `AarkaRouter`, `AarkaLens`, `HookLens`, `AarkaSequencerFeed` | 100% | 100% |
+| `AarkaParityHook` | 100% | 32 of 33 |
 
-The fork suite replays the real SPY close of 11 September 2026, which the original 6-hour
-settlement window could never have settled, and a 198,652-token sale that once silenced the hook.
+The one branch it does not reach is the sign check in `_settleDebt`, which runs only straight after
+an exact-input swap through a pool with liquidity, and such a swap always leaves a debt.
+
+The parity hook, measured against the live 0.30% NVDA/USDG pool, with about 9,000 of each half in its own pools:
+
+| Floor buy | $10k | $50k | $100k | $250k | $500k | $1m |
+| --- | --- | --- | --- | --- | --- | --- |
+| NVDA split by the hook | under threshold | 164 | 322 | 754 | 1,363 | 1,140 |
+| Paid to LPs | — | $676 | $3,141 | $19,982 | $67,149 | $210,261 |
+| Gap left | 96 bps | 0 | 3 bps | 156 bps | 2,993 bps | 3,558 bps |
+
+Before AUDIT-30 the $1m trade drew no correction at all. Unit-suite coverage
+(`forge coverage --no-match-coverage "test|script|src/testnet"`) is 99% of lines and 93% of
+branches; the older fork suites replay the real SPY close of 11 September 2026 and a
+198,652-token sale that once silenced the hook.
 
 ## Tech stack
 
@@ -211,7 +250,7 @@ settlement window could never have settled, and a 198,652-token sale that once s
 
 ```bash
 git clone --recursive https://github.com/Madhav-Gupta-28/Aarka && cd Aarka
-forge build && forge test --no-match-path "test/{Fork,XLayerFork}.t.sol"
+forge build && forge test --no-match-path "test/{Fork.t.sol,XLayerFork.t.sol,fork/**}"
 
 cd web && npm install && npm run dev        # http://localhost:3000, against the live testnet
 ```
