@@ -40,5 +40,7 @@ int_types = "long"
 
 [rpc_endpoints]
 robinhood = "https://rpc.mainnet.chain.robinhood.com"
+# Archive state for the mainnet fork suite (test/fork/mainnet). The public RPC keeps ~1h of history.
+robinhood_archive = "https://4663.rpc.thirdweb.com"
 robinhood_testnet = "https://rpc.testnet.chain.robinhood.com"
 xlayer = "https://rpc.xlayer.tech"
