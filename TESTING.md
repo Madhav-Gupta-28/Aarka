@@ -52,8 +52,16 @@ realigned to the mirrored Chainlink price at the same time — NVDA $227.31, TSL
 The eleven open markets were redeployed again on 29 September with the AUDIT-27 liquidity hold and
 the AUDIT-28 settlement check, each opened at its old market's prices so nothing a user sees moved.
 Their addresses end in `0640`, the three permission bits the hook now needs. The four 25 SEP 26
-series had ended by then and keep their 22 September hooks. Every replaced hook is still on chain
-and still works; the site reads them only for the parity history.
+series had ended by then and keep their 22 September hooks.
+
+The seven markets still open were redeployed on 8 October with AUDIT-30 (the mint arb splits what
+the stock purchase actually delivered, and a failed arb is retried at smaller sizes), each opened
+where its old market traded, at 0 bps, after a full rehearsal on a fork of testnet. HookLens was
+redeployed the same day with AUDIT-31 at `0x8eC38Fafb7fD2A53864c552E4EcC3bc63990aAD3`. The two stock
+pools were then moved to the mirrored Chainlink price ($237.17 NVDA, $372.53 TSLA) with
+`script/Realign.s.sol`, and the four NVDA hooks restored parity live against it; the TSLA markets
+sit at 96 bps, inside the band where three pools' fees make an arb unprofitable. Every replaced hook
+is still on chain and still works; the site reads them only for the parity history.
 
 | Market | Parity hook |
 | --- | --- |
@@ -65,13 +73,13 @@ and still works; the site reads them only for the parity history.
 | NVDA $230 · 02 OCT 26 | `0xc84Dd6ec3f2BC560dAa06648999FE3c39110c640` |
 | TSLA $350 · 02 OCT 26 | `0xe38d9f109E62bf11A438869C5f82d79788940640` |
 | TSLA $400 · 02 OCT 26 | `0xcE497F09B3ada431e954cb2b39f9b7684fd18640` |
-| NVDA $210 · 30 OCT 26 | `0x8870eAd4E4147cE352F1B33943543031a7c80640` |
-| NVDA $230 · 30 OCT 26 | `0x6d316696b4c80f71ec66F43Cd8F801D638158640` |
-| TSLA $350 · 30 OCT 26 | `0xd41CCb4C5E91b89034e75A44712b5c92B9750640` |
-| TSLA $400 · 30 OCT 26 | `0xc117478b0b0689E1295E832E72C98cf911e8C640` |
-| NVDA $210 · 06 NOV 26 | `0x7dd74c60E65138103891cB1E557c31E65b1B0640` |
-| NVDA $230 · 06 NOV 26 | `0xBba9E3124A2511e2Cf501Eb51CEDCf28496A4640` |
-| TSLA $350 · 06 NOV 26 | `0x68D08E3B92497F78D2016b0003266dEd33338640` |
+| NVDA $210 · 30 OCT 26 | `0x186004Bd439906d5AbB2b5e3f22B2b38b2688640` |
+| NVDA $230 · 30 OCT 26 | `0x281574fa09CeF066Af30AFdbA89759B890540640` |
+| TSLA $350 · 30 OCT 26 | `0x69Eebd1d923A03cE34d2Ca487D8f0AF8C8e24640` |
+| TSLA $400 · 30 OCT 26 | `0x496a9Da088CFBB201d77075CdF5BE6d50a3C4640` |
+| NVDA $210 · 06 NOV 26 | `0x84C1ac8A9FEAD01427B9B5E2B1684d6444A08640` |
+| NVDA $230 · 06 NOV 26 | `0x8c39d96eB7D9cE1894292330f9Bb41021e2e0640` |
+| TSLA $350 · 06 NOV 26 | `0xbBB1B7f206bA65f4182Fc123f08f048129494640` |
 
 ### Previous deployment
 
