@@ -161,3 +161,11 @@
   .page { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 720px) { .toasts { right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); } }
+
+/* ── Tour: the three-step walkthrough on the app's first visit ─────────────────────────────── */
+.tour { position: fixed; inset: 0; z-index: 8000; pointer-events: none; }
+.tour-hole { position: fixed; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(5, 7, 10, .66), 0 0 40px 4px var(--glow-accent); }
+.tour-card { position: fixed; width: min(380px, calc(100vw - 32px)); pointer-events: auto; display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 14px; background: var(--surface); border: 1px solid var(--bronze); box-shadow: 6px 6px 0 var(--shadow); }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots span { width: 8px; height: 8px; background: var(--line); }
+.tour-dots span.on { background: var(--accent); }
