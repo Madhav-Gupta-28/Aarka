@@ -207,7 +207,7 @@
 .river.narrow .r-bank { stroke-width: 26; }
 .river.narrow .r-water { stroke-width: 16; }
 
-.port { position: relative; z-index: 2; min-height: 96svh; display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 64px clamp(16px, 4vw, 60px); scroll-margin-top: 4px; }
+.port { position: relative; z-index: 2; min-height: 70svh; display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 40px clamp(16px, 4vw, 60px); scroll-margin-top: 4px; }
 .port.even .tablet-card { grid-column: 2; }
 .port.odd .tablet-card { grid-column: 1; justify-self: end; }
 .tablet-card { position: relative; width: min(560px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 26px 28px 24px; background:
@@ -385,7 +385,7 @@
 .code-card button { position: absolute; top: 8px; right: 8px; padding: 4px 8px; font-size: 10px; letter-spacing: .1em; color: var(--text-3); background: var(--surface); border: 1px solid var(--line); }
 
 @media (max-width: 860px) {
-  .port { grid-template-columns: 1fr; min-height: 0; padding: 72px 16px 40px 60px; }
+  .port { grid-template-columns: 1fr; min-height: 0; padding: 40px 16px 24px 60px; }
   .port.even .tablet-card, .port.odd .tablet-card { grid-column: 1; justify-self: stretch; }
   .tablet-card { padding: 20px 18px; }
   .minimap { display: none; }
@@ -514,3 +514,11 @@
   .tl-track-wrap { margin: 18px 16px 0; }
 }
 @media (max-width: 720px) { .tl-station span { display: none; } .tl-window span { font-size: 8px; letter-spacing: .08em; } .tl-track-wrap { height: 110px; } }
+@media (max-width: 720px) {
+  .eq-mini, .eq-mini.two { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .eq-mini.two { grid-template-columns: 1fr 1fr; }
+  .eq-mini > div { padding: 8px; }
+  .eq-mini .relic { display: none; }
+  .eq-mini b { font-size: 15px; }
+  .eq-mini .label { font-size: 9px; }
+}

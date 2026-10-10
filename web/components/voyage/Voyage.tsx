@@ -19,39 +19,33 @@ import type {Chamber, TermKey} from "./terms";
 
 /**
  * How it works, as a voyage. A river runs the length of the page and a reed boat rides it as you
- * scroll, carrying a coin. At each of eight ports the boat slows and docks, the coin changes to
+ * scroll, carrying a coin. At each of six ports the boat slows and docks, the coin changes to
  * show that port's idea, and a clay tablet rises beside it and writes itself. Key words open a
  * preview on hover and a 3D deep dive on click. Spec mode turns the whole thing into a reference.
  */
 
 const T = (k: TermKey, label: string): Seg => ({node: <Term k={k}>{label}</Term>, text: label});
 
-type Port = {id: string; n: string; title: [string, string]; name: string; segs: Seg[]; pull: string; Extra?: () => React.ReactElement | null};
+type Port = {id: string; n: string; cargo: number; title: [string, string]; name: string; segs: Seg[]; pull: string; Extra?: () => React.ReactElement | null};
 
 const PORTS: Port[] = [
-  {id: "share", n: "I", name: "The share", title: ["The ", "share"],
-   segs: ["A share is a small piece of a company. When its price goes up, your share is worth more; when it goes down, less. Every split starts with one share: yours, or a free practice one."],
-   pull: "One share. One price. That's where it starts.", Extra: LivePrice},
-  {id: "line", n: "II", name: "The line", title: ["The ", "line"],
-   segs: [T("line", "The line"), " is a price, like $230. It's where a share is cut in two. Each split also has an ", T("end", "end date"), ". Neither one ever changes once the split exists."],
-   pull: "A price and a date. Everything turns on them.", Extra: LiveLines},
-  {id: "halves", n: "III", name: "Two halves", title: ["Two ", "halves"],
-   segs: ["Split a share and you hold two pieces. The ", T("floor", "Floor"), " gets the share's value up to the line. The ", T("upside", "Upside"), " gets everything above it. Together they always make exactly one share, so you can ", T("rejoin", "put them back together"), " at any moment."],
+  {id: "share", n: "I", name: "The line", cargo: 1, title: ["One share, one ", "line"],
+   segs: ["Every split starts with one share and ", T("line", "a line"), ", like $230, where it's cut in two. Each split also has an ", T("end", "end date"), ". Neither ever changes."],
+   pull: "A share, a price and a date.", Extra: LiveLines},
+  {id: "halves", n: "II", name: "Two halves", cargo: 2, title: ["Two ", "halves"],
+   segs: ["The ", T("floor", "Floor"), " gets the share's value up to the line. The ", T("upside", "Upside"), " gets everything above it. Together they're one share, so you can ", T("rejoin", "put them back together"), " any time."],
    pull: "Floor and Upside make one share. Always.", Extra: LiveEquation},
-  {id: "endings", n: "IV", name: "Three endings", title: ["Three ", "endings"],
-   segs: ["On the end date, the ", T("final", "final price"), " decides what each piece pays. Below the line, the Floor takes it all and the Upside ends at $0. Above it, the Floor stops at the line and the Upside takes the rest."],
+  {id: "endings", n: "III", name: "Three endings", cargo: 3, title: ["Three ", "endings"],
+   segs: ["The ", T("final", "final price"), " decides what each half pays. Below the line, the Floor takes it all. Above it, the Floor stops at the line and the Upside takes the rest."],
    pull: "The Floor stops at the line. The Upside starts there.", Extra: Endings},
-  {id: "final", n: "V", name: "The final day", title: ["The final ", "day"],
-   segs: ["At the end time, ", T("sun", "The Sun"), " has the last word: its last price at or before the end becomes the final price. For ", T("window", "one hour"), " anyone can correct it with a later price the rules allow. Then you ", T("collect", "collect"), ", whenever you like."],
-   pull: "The Sun sets it. You collect it.", Extra: MiniTimeline},
-  {id: "sun", n: "VI", name: "The Sun", title: ["The ", "Sun"],
-   segs: [T("sun", "The Sun"), " is Chainlink's public price network. It publishes a price whenever the stock moves, and at least once a day. Aarka only reads it. Nobody here can set or change a price."],
-   pull: "Independent. Public. Nobody's thumb on it.", Extra: LiveFeeds},
-  {id: "scales", n: "VII", name: "The Scales", title: ["The ", "Scales"],
-   segs: ["A Floor and an Upside always make one share, so their prices should add up to one share's price. ", T("scales", "The Scales"), " act inside trades that push the two apart, buying the cheap side and selling the dear one, so the halves keep tracking the whole."],
+  {id: "sun", n: "IV", name: "The final day", cargo: 4, title: ["The final ", "day"],
+   segs: [T("sun", "The Sun"), ", Chainlink's public price feed, sets the final price. Nobody at Aarka can. After ", T("window", "one hour"), " to correct it, you ", T("collect", "collect"), " whenever you like."],
+   pull: "The Sun sets it. You collect it.", Extra: LiveFeeds},
+  {id: "scales", n: "V", name: "The Scales", cargo: 6, title: ["The ", "Scales"],
+   segs: [T("scales", "The Scales"), " trade against gaps between the halves and the share, so Floor plus Upside keeps tracking one share's price."],
    pull: "Two halves, one price, kept in line by code.", Extra: LiveParity},
-  {id: "risks", n: "VIII", name: "The risks", title: ["The risks, ", "honestly"],
-   segs: ["You can lose money. The ", T("upside", "Upside"), " can end at $0. The ", T("floor", "Floor"), " still falls if the stock falls. If you sell the Upside, you give away the growth above the line."],
+  {id: "risks", n: "VI", name: "The risks", cargo: 7, title: ["The risks, ", "honestly"],
+   segs: ["The ", T("upside", "Upside"), " can end at $0. The ", T("floor", "Floor"), " still falls if the stock falls. No borrowing, no margin calls, no force-selling."],
    pull: "Only use money you're comfortable losing.", Extra: Risks},
 ];
 
@@ -70,9 +64,9 @@ export function Voyage() {
       <section className="voyage-intro gridlines">
         <div className="wrap voyage-intro-in">
           <div className="stack gap-16">
-            <span className="kicker">F3 · HOW IT WORKS · EIGHT PORTS · ABOUT 6 MIN</span>
+            <span className="kicker">F3 · HOW IT WORKS · SIX PORTS · ABOUT 3 MIN</span>
             <h1 className="display h-xl">How a split <span className="px-em">works</span></h1>
-            <p className="lead" style={{maxWidth: 560}}>One share, one line, one date. Ride the river down; at each port the coin changes and a tablet writes what it means. Words with a <span className="gold">◆</span> open up.</p>
+            <p className="lead" style={{maxWidth: 560}}>Scroll down the river. Words with a <span className="gold">◆</span> open up.</p>
           </div>
           <div className="stack gap-12" style={{alignItems: "flex-start"}}>
             <span className="label">READ IT AS</span>
@@ -242,7 +236,7 @@ function River() {
       {geo && !reduce && (
         <div ref={boat} className="boat" aria-hidden>
           <div className="boat-inner">
-            <Cargo stage={Math.max(0, at)} size={geo.narrow ? 36 : 48} />
+            <Cargo stage={PORTS[Math.max(0, at)].cargo} size={geo.narrow ? 36 : 48} />
             <Boat />
             <span className="wake w1" /><span className="wake w2" /><span className="wake w3" />
           </div>
@@ -335,19 +329,6 @@ function useFeatured() {
   return {rows, parity, s, q: s ? quoteFor(s, parity) : undefined};
 }
 
-function LivePrice() {
-  const {rows} = useFeatured();
-  const st = stocksOf(rows);
-  if (!st.length) return null;
-  return (
-    <div className="port-extra row gap-12 wrap-row">
-      {st.map((x) => (
-        <div key={x.symbol} className="mini-stat"><span className="label">{stockName(x.symbol).toUpperCase()} · ONE SHARE</span><b className="num gold">{money(x.spot)}</b></div>
-      ))}
-    </div>
-  );
-}
-
 function LiveLines() {
   const {rows} = useFeatured();
   const open = (rows ?? []).filter((r) => r.status === 0 && r.underlyingSymbol === "NVDA").sort((a, b) => Number(a.strike - b.strike));
@@ -388,15 +369,6 @@ function Endings() {
         <div><Relic src={RELIC.coinFloor} size={28} /><span className="label">FLOOR PAYS</span><b className="num gold">{money(Math.min(P, K))}</b></div>
         <div style={{opacity: P > K ? 1 : 0.45}}><Relic src={RELIC.coinUp} size={28} /><span className="label">UPSIDE PAYS</span><b className="num gold">{money(Math.max(P - K, 0))}</b></div>
       </div>
-    </div>
-  );
-}
-
-function MiniTimeline() {
-  const steps = ["End time", "Price carved", "One hour", "Collect"];
-  return (
-    <div className="port-extra mini-time" aria-label="End time, then the price is carved, then one hour to correct it, then collect">
-      {steps.map((s, i) => <div key={s}><i>{["I", "II", "III", "IV"][i]}</i><span>{s}</span></div>)}
     </div>
   );
 }
