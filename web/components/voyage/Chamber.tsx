@@ -281,11 +281,14 @@ const DAY = 86400;
 function SunChamber({layer}: {layer: Layer}) {
   const {data: rounds} = useRounds(ADDRESSES.feed as `0x${string}`, 8);
   const live = !!rounds?.length;
+  // A phone shows the last five rounds, big enough to read; a wide screen shows all eight.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => { const m = matchMedia("(max-width: 720px)"); setNarrow(m.matches); const on = () => setNarrow(m.matches); m.addEventListener("change", on); return () => m.removeEventListener("change", on); }, []);
   const rs = useMemo(() => {
-    if (rounds?.length) return [...rounds].sort((a, b) => a.at - b.at);
+    if (rounds?.length) return [...rounds].sort((a, b) => a.at - b.at).slice(narrow ? -5 : 0);
     const now = Math.floor(Date.now() / 1000);
     return [5, 4, 3, 2, 1, 0].map((d, i) => ({id: BigInt(100 + i), price: 228 + Math.sin(i * 1.7) * 6, at: now - d * DAY}));
-  }, [rounds]);
+  }, [rounds, narrow]);
   const t0 = rs[0].at, t1 = rs[rs.length - 1].at;
   const span = Math.max(1, t1 - t0);
   const [end, setEnd] = useState<number | null>(null);

@@ -25,12 +25,17 @@ export function Term({k, children}: {k: TermKey; children?: React.ReactNode}) {
 
   const place = () => {
     const r = ref.current!.getBoundingClientRect();
-    const sheet = innerWidth < 720;
+    const sheet = innerWidth < 720 || touchy();
     const above = r.bottom + 260 > innerHeight && r.top > 280;
     setPos({x: Math.max(16, Math.min(innerWidth - 336, r.left + r.width / 2 - 160)), y: above ? r.top - 10 : r.bottom + 10, above, sheet});
   };
+  // Three ways in, kept apart: a mouse hovers, a keyboard focuses, a finger taps. A tap fires the
+  // browser's pretend hover and focus too, so those only count for a real mouse and a real keyboard;
+  // the tap itself opens the card, as a sheet that stays until it's closed.
+  const lastPointer = useRef<string>("mouse");
   const enter = () => { clearTimeout(timer.current); timer.current = setTimeout(() => { place(); setShow(true); }, 110); };
   const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setShow(false), 180); };
+  const touchy = () => lastPointer.current !== "mouse" || matchMedia("(hover: none)").matches;
 
   useEffect(() => {
     if (!show) return;
@@ -46,8 +51,16 @@ export function Term({k, children}: {k: TermKey; children?: React.ReactNode}) {
   return (
     <>
       <button ref={ref} type="button" className="term" aria-describedby={show ? id : undefined} aria-expanded={show}
-              onMouseEnter={enter} onMouseLeave={leave} onFocus={enter} onBlur={leave}
-              onClick={() => { place(); setShow((v) => !v); }}>
+              onPointerDown={(e) => { lastPointer.current = e.pointerType; }}
+              onPointerEnter={(e) => { if (e.pointerType === "mouse") enter(); }}
+              onPointerLeave={(e) => { if (e.pointerType === "mouse") leave(); }}
+              onFocus={(e) => { if (!touchy() && e.currentTarget.matches(":focus-visible")) enter(); }}
+              onBlur={() => { if (!touchy()) leave(); }}
+              onClick={() => {
+                clearTimeout(timer.current);
+                place();
+                if (touchy()) setShow(true); else setShow((v) => !v);
+              }}>
         {children ?? t.name}<i aria-hidden>◆</i>
       </button>
       {typeof document !== "undefined" && createPortal(
@@ -55,17 +68,19 @@ export function Term({k, children}: {k: TermKey; children?: React.ReactNode}) {
           {show && pos && (
             <>
               {pos.sheet && <motion.div className="term-scrim" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} onClick={() => setShow(false)} />}
-              <motion.div id={id} role="tooltip" className={`term-card${pos.sheet ? " sheet" : ""}`}
+              <motion.div id={id} role={pos.sheet ? "dialog" : "tooltip"} data-lenis-prevent className={`term-card${pos.sheet ? " sheet" : ""}`}
                           style={pos.sheet ? undefined : {left: pos.x, top: pos.y, transformOrigin: pos.above ? "bottom center" : "top center", translateY: pos.above ? "-100%" : 0}}
                           initial={pos.sheet ? {y: "100%"} : {opacity: 0, scale: 0.94}} animate={pos.sheet ? {y: 0} : {opacity: 1, scale: 1}}
                           exit={pos.sheet ? {y: "100%"} : {opacity: 0, scale: 0.96}} transition={{type: "spring", stiffness: 420, damping: 34}}
                           onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={leave}>
+                {pos.sheet && <span className="sheet-grip" aria-hidden />}
                 <div className={`term-loop loop-${t.loop}`} aria-hidden><Loop k={k} /></div>
                 <div className="stack" style={{gap: 6, minWidth: 0}}>
-                  <strong className="display" style={{fontSize: 22, lineHeight: 1}}>{t.name}</strong>
-                  <span className="small" style={{fontSize: 14}}>{t.def}</span>
+                  <strong className="display" style={{fontSize: pos.sheet ? 28 : 22, lineHeight: 1}}>{t.name}</strong>
+                  <span className="small" style={{fontSize: pos.sheet ? 16 : 14, lineHeight: 1.5}}>{t.def}</span>
                   <button className="term-dive mono" onClick={() => { setShow(false); open(t.chamber); }}>DEEP DIVE ⤢</button>
                 </div>
+                {pos.sheet && <button className="sheet-x mono" onClick={() => setShow(false)} aria-label="Close">CLOSE ✕</button>}
               </motion.div>
             </>
           )}
