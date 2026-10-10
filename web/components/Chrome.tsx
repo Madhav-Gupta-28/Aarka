@@ -12,6 +12,7 @@ import {setSound, useSound} from "@/lib/sound";
 import {usePrefs, useReducedMotion} from "@/lib/ui";
 import {BackButton} from "./BackButton";
 import {Keys} from "./Keys";
+import {SunPulse} from "./SunPulse";
 import {TeleportLink} from "./Teleport";
 import {Mark} from "./Mark";
 import {Relic} from "./Relic";
@@ -169,6 +170,7 @@ export function SiteHeader({overlay}: {overlay?: boolean}) {
       <NavSlab />
       <Keys />
       <TabBar />
+      <SunPulse />
       <div className="head-tools">
         <SoundButton />
         {trades && <ViewSwitch />}

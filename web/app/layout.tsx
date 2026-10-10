@@ -5,6 +5,7 @@ import {Providers} from "@/components/Providers";
 import "./globals.css";
 import "./pages.css";
 import "./kinetic.css";
+import "./experience.css";
 
 /**
  * Four voices. A knife-cut serif for feeling, a sturdy grotesk for reading, a terminal mono for

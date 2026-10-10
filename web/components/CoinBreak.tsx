@@ -5,6 +5,7 @@ import {TeleportLink} from "./Teleport";
 import {useEffect, useRef, useState} from "react";
 import {AnimatePresence, motion, useMotionValueEvent, useScroll, useTransform} from "motion/react";
 import {money} from "@/lib/format";
+import {C, hash, lit, type Col} from "@/lib/pixel";
 import {useReducedMotion} from "@/lib/ui";
 
 /**
@@ -22,29 +23,9 @@ import {useReducedMotion} from "@/lib/ui";
  * smooth vector scaled down. With reduced motion the finished mark is drawn once and held.
  */
 
-const C = {b: "#0E1116", s: "#161A21", z: "#8C6A3F", o: "#D9924A", y: "#F0B46E", l: "#F7F4ED", d: "#5A3E1E"} as const;
-type Col = keyof typeof C;
-
 const N = 56;          // the coin's grid
 const R = 26;          // coin radius, in cells
 const RING_IN = 15;    // the Upside's hollow
-
-/** Light from the top left, checker-dithered at the transitions. */
-function lit(x: number, y: number, cx: number, cy: number, r: number): Col {
-  const l = (-(x - cx) - (y - cy)) / (r * 1.414);
-  const ch = (Math.floor(x) + Math.floor(y)) % 2 === 0;
-  if (l > 0.5) return "y";
-  if (l > 0.25) return ch ? "y" : "o";
-  if (l < -0.55) return "z";
-  if (l < -0.3) return ch ? "z" : "o";
-  return "o";
-}
-
-/** A deterministic hash in [0, 1), so the dissolve order and the shards never change. */
-const hash = (x: number, y: number) => {
-  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return s - Math.floor(s);
-};
 
 type Cell = {x: number; y: number; c: Col; right: boolean; crack: number; hollow: boolean; order: number};
 

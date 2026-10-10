@@ -1,19 +1,16 @@
 import {Shell} from "@/components/Chrome";
 import {SmoothScroll} from "@/components/Kinetic";
-import {LearnBody} from "@/components/LearnBody";
-import {SunBody} from "@/components/SunBody";
+import {Voyage} from "@/components/voyage/Voyage";
 
 /**
- * How it works, for everyone who asks. The first half is for someone who has never heard of a
- * split: six tablets, three endings, a quiz. The second half is for someone who wants to check the
- * claims: where prices come from, the settlement rules, the challenge window, the contracts.
+ * How it works, as a voyage down a river: eight ports, a coin that changes at each, tablets that
+ * write themselves, words that open into 3D deep dives. Spec mode is the same, as a reference.
  */
 export default function How() {
   return (
     <Shell strip={false}>
       <SmoothScroll />
-      <LearnBody />
-      <SunBody />
+      <Voyage />
     </Shell>
   );
 }
