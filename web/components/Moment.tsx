@@ -15,6 +15,7 @@ import {Relic} from "./Relic";
  */
 
 export type Done = {
+  practice?: boolean;  // a practice run: nothing was sent, so nothing to share or look up
   half: "floor" | "upside";
   big: string;       // the number that rolls: "$1.66" or "4.212"
   unit: string;      // "in cash" or "Upsides"
@@ -23,7 +24,7 @@ export type Done = {
   card: Card;
 };
 
-export function Moment({done, onClose}: {done: Done | null; onClose: () => void}) {
+export function Moment({done, onClose, onReal}: {done: Done | null; onClose: () => void; onReal?: () => void}) {
   const reduce = useReducedMotion();
   const [sharing, setSharing] = useState<"" | "busy" | "posted" | "shared">("");
   const primary = useRef<HTMLButtonElement>(null);
@@ -50,6 +51,11 @@ export function Moment({done, onClose}: {done: Done | null; onClose: () => void}
                     onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
           <motion.div className="moment-card" initial={reduce ? false : {y: 28, scale: 0.96}} animate={{y: 0, scale: 1}} exit={{y: 16, opacity: 0}} transition={{type: "spring", stiffness: 260, damping: 26}}>
             <div className="moment-stage" aria-hidden>
+              {/* Earned cash: banknotes rain down. Bet on a rise: gold sparks lift. */}
+              {!reduce && Array.from({length: done.half === "floor" ? 16 : 22}, (_, i) => (
+                <span key={i} className={done.half === "floor" ? "m-note" : "m-spark"}
+                      style={{left: `${(i * 37) % 100}%`, animationDelay: `${(i % 8) * 0.12 + 0.35}s`, ["--dx" as string]: `${((i * 53) % 60) - 30}px`}} />
+              ))}
               <motion.span className="moment-sun" initial={reduce ? false : {scale: 0.2, opacity: 0}} animate={{scale: 1, opacity: 1}} transition={{duration: 0.9, ease: [0.22, 1, 0.36, 1]}} />
               {/* One coin, then two halves: the kept one comes forward, the other drifts off. */}
               <motion.span className="moment-coin" initial={reduce ? false : {opacity: 1, scale: 1}} animate={{opacity: 0, scale: 1.08}} transition={{delay: 0.35, duration: 0.25}}>
@@ -69,25 +75,40 @@ export function Moment({done, onClose}: {done: Done | null; onClose: () => void}
               })}
             </div>
 
-            <span className="kicker" style={{textAlign: "center"}}>CONFIRMED · IT&apos;S YOURS</span>
+            <span className="kicker" style={{textAlign: "center"}}>{done.practice ? "PRACTICE RUN · NOTHING WAS SENT" : <>CONFIRMED · IT&apos;S YOURS</>}</span>
             <div className="moment-num" id="moment-h">
               <DigitRoll text={done.big} size={72} className="gold" style={{letterSpacing: "-.04em"}} />
               <span className="lead" style={{fontSize: 20}}>{done.unit}</span>
             </div>
             <p className="body center" style={{maxWidth: 440, margin: "0 auto"}}>{done.line}</p>
 
-            <div className="moment-acts">
-              <button ref={primary} className="btn btn-primary btn-lg" onClick={toPositions}>See it in my positions ↓</button>
-              <button className="btn btn-secondary btn-lg" disabled={sharing === "busy"}
-                      onClick={async () => { setSharing("busy"); setSharing(await shareCard(done.card) === "shared" ? "shared" : "posted"); }}>
-                {sharing === "busy" ? "Drawing the card…" : sharing === "posted" ? "✓ Card saved, post opened" : sharing === "shared" ? "✓ Shared" : "Share on X"}
-              </button>
-            </div>
-            <div className="row gap-16 wrap-row" style={{justifyContent: "center"}}>
-              <button className="btn-link mono" onClick={() => downloadCard(done.card)}>Download the card</button>
-              {done.hash && <a className="mono" href={explorerTx(done.hash)} target="_blank" rel="noreferrer">Public receipt ↗</a>}
-              <button className="btn-link mono muted" onClick={onClose}>Close</button>
-            </div>
+            {done.practice ? (
+              <>
+                <div className="moment-acts">
+                  <button ref={primary} className="btn btn-primary btn-lg" onClick={() => onReal?.()}>Make it real →</button>
+                  <button className="btn btn-secondary btn-lg" onClick={toPositions}>See it on my shelf ↓</button>
+                </div>
+                <div className="row gap-16 wrap-row" style={{justifyContent: "center"}}>
+                  <span className="small muted">That&apos;s exactly how it goes for real, with test money instead of pretend.</span>
+                  <button className="btn-link mono muted" onClick={onClose}>Keep practising</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="moment-acts">
+                  <button ref={primary} className="btn btn-primary btn-lg" onClick={toPositions}>See it in my positions ↓</button>
+                  <button className="btn btn-secondary btn-lg" disabled={sharing === "busy"}
+                          onClick={async () => { setSharing("busy"); setSharing(await shareCard(done.card) === "shared" ? "shared" : "posted"); }}>
+                    {sharing === "busy" ? "Drawing the card…" : sharing === "posted" ? "✓ Card saved, post opened" : sharing === "shared" ? "✓ Shared" : "Share on X"}
+                  </button>
+                </div>
+                <div className="row gap-16 wrap-row" style={{justifyContent: "center"}}>
+                  <button className="btn-link mono" onClick={() => downloadCard(done.card)}>Download the card</button>
+                  {done.hash && <a className="mono" href={explorerTx(done.hash)} target="_blank" rel="noreferrer">Public receipt ↗</a>}
+                  <button className="btn-link mono muted" onClick={onClose}>Close</button>
+                </div>
+              </>
+            )}
           </motion.div>
         </motion.div>
       )}

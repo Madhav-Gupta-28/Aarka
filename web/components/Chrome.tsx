@@ -9,6 +9,7 @@ import {short} from "@/lib/format";
 import {explorerAddr} from "@/lib/tx";
 import {usePrefs} from "@/lib/ui";
 import {Keys} from "./Keys";
+import {SunPulse} from "./SunPulse";
 import {TeleportLink} from "./Teleport";
 import {Mark} from "./Mark";
 
@@ -151,6 +152,7 @@ export function SiteHeader({overlay}: {overlay?: boolean}) {
       <NavSlab />
       <Keys />
       <TabBar />
+      <SunPulse />
       <div className="head-tools">
         {trades && <ViewSwitch />}
         <WalletButton />

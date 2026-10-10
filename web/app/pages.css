@@ -140,13 +140,6 @@
 
 .endings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 
-.faq > div { border-top: 1px solid var(--line); }
-.faq button { width: 100%; min-height: 72px; padding: 16px 0; display: flex; justify-content: space-between; align-items: center; gap: 24px; background: transparent; border: 0; color: var(--text); font-family: var(--f-display), serif; font-size: clamp(22px, 2.1vw, 30px); line-height: 1.15; text-align: left; }
-.faq button:hover { color: var(--accent-text); }
-.faq button span { font: 500 20px/1 var(--f-num), monospace; color: var(--accent); transition: transform 240ms var(--ease); }
-.faq button[aria-expanded="true"] span { transform: rotate(180deg); }
-.faq p { margin: 0 0 24px; max-width: 720px; font-size: 18px; line-height: 1.6; color: var(--text-2); animation: fade-up 240ms var(--ease); }
-
 /* ── States / 404 / practice ───────────────────────────────────────────────────────────────── */
 
 .centre-page { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: center; padding-block: clamp(64px, 9vw, 128px) clamp(80px, 11vw, 160px); }
